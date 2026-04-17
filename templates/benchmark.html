@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Benchmark Comparison{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 class="h4 mb-1"><i class="bi bi-trophy me-2"></i>Benchmark Comparison</h1>
+        <p class="text-muted small">Compare your ensemble model against published baselines.</p>
+      </div>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+    </div>
+
+    <div class="row g-4">
+      <!-- Form -->
+      <div class="col-md-5">
+        <div class="card shadow-sm rounded-4">
+          <div class="card-body p-4">
+            <h2 class="h6 mb-3">
+              <i class="bi bi-pencil me-2"></i>Enter Baseline Metrics
+            </h2>
+            <p class="text-muted small mb-3">
+              Enter metrics from a published paper or competing model for side-by-side comparison.
+            </p>
+            <form method="POST">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Platform</label>
+                <select class="form-select" name="platform" required>
+                  {% for p in platforms %}
+                  {% if our_metrics.get(p) %}
+                  <option value="{{ p }}" {% if baseline_result and baseline_result.platform == p %}selected{% endif %}>
+                    {{ p|capitalize }} ✓
+                  </option>
+                  {% else %}
+                  <option value="{{ p }}" disabled>{{ p|capitalize }} (not trained)</option>
+                  {% endif %}
+                  {% endfor %}
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Baseline Name</label>
+                <input type="text" class="form-control" name="baseline_name"
+                       placeholder="e.g. SybilEdge 2023, Zhang et al."
+                       value="{{ baseline_result.baseline_name if baseline_result else '' }}">
+              </div>
+              <div class="row g-2">
+                <div class="col-6">
+                  <label class="form-label small fw-semibold">Accuracy (0–1)</label>
+                  <input type="number" class="form-control" name="acc" min="0" max="1" step="0.001"
+                         placeholder="0.950"
+                         value="{{ baseline_result.baseline.accuracy if baseline_result else '' }}">
+                </div>
+                <div class="col-6">
+                  <label class="form-label small fw-semibold">Precision (0–1)</label>
+                  <input type="number" class="form-control" name="prec" min="0" max="1" step="0.001"
+                         placeholder="0.940"
+                         value="{{ baseline_result.baseline.precision if baseline_result else '' }}">
+                </div>
+                <div class="col-6">
+                  <label class="form-label small fw-semibold">Recall (0–1)</label>
+                  <input type="number" class="form-control" name="rec" min="0" max="1" step="0.001"
+                         placeholder="0.930"
+                         value="{{ baseline_result.baseline.recall if baseline_result else '' }}">
+                </div>
+                <div class="col-6">
+                  <label class="form-label small fw-semibold">F1 Score (0–1)</label>
+                  <input type="number" class="form-control" name="f1" min="0" max="1" step="0.001"
+                         placeholder="0.935"
+                         value="{{ baseline_result.baseline.f1 if baseline_result else '' }}">
+                </div>
+              </div>
+              <button class="btn btn-primary w-100 mt-3">
+                <i class="bi bi-bar-chart me-2"></i>Compare
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="col-md-7">
+        {% if baseline_result %}
+        {% set our = baseline_result.our %}
+        {% set base = baseline_result.baseline %}
+        <div class="card shadow-sm rounded-4 mb-3">
+          <div class="card-body p-4">
+            <h2 class="h6 mb-3">
+              <i class="bi bi-bar-chart me-2"></i>
+              {{ baseline_result.platform|capitalize }} — Our Model vs {{ baseline_result.baseline_name }}
+            </h2>
+
+            {% if bench_chart %}
+            <img src="{{ url_for('static', filename=bench_chart) }}"
+                 class="img-fluid rounded mb-3 w-100">
+            {% endif %}
+
+            <!-- Metric comparison table -->
+            <div class="table-responsive">
+              <table class="table table-sm align-middle">
+                <thead class="table-light">
+                  <tr>
+                    <th>Metric</th>
+                    <th>Our Ensemble</th>
+                    <th>{{ baseline_result.baseline_name }}</th>
+                    <th>Difference</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for metric, label in [('accuracy','Accuracy'),('precision','Precision'),('recall','Recall'),('f1','F1')] %}
+                  {% set our_val = our.get(metric, 0) or 0 %}
+                  {% set base_val = base.get(metric, 0) or 0 %}
+                  {% set diff = our_val - base_val %}
+                  <tr>
+                    <td class="fw-semibold">{{ label }}</td>
+                    <td>
+                      <span class="badge {% if our_val >= 0.9 %}text-bg-success{% elif our_val >= 0.75 %}text-bg-warning{% else %}text-bg-secondary{% endif %}">
+                        {{ "%.3f"|format(our_val) }}
+                      </span>
+                    </td>
+                    <td>
+                      <span class="badge text-bg-secondary">{{ "%.3f"|format(base_val) }}</span>
+                    </td>
+                    <td>
+                      {% if diff > 0 %}
+                        <span class="text-success fw-semibold">
+                          <i class="bi bi-arrow-up me-1"></i>+{{ "%.3f"|format(diff) }}
+                        </span>
+                      {% elif diff < 0 %}
+                        <span class="text-danger fw-semibold">
+                          <i class="bi bi-arrow-down me-1"></i>{{ "%.3f"|format(diff) }}
+                        </span>
+                      {% else %}
+                        <span class="text-muted">= Tied</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            {% set our_f1 = our.get('f1', 0) or 0 %}
+            {% set base_f1 = base.get('f1', 0) or 0 %}
+            {% if our_f1 > base_f1 %}
+            <div class="alert alert-success rounded-3 small mb-0">
+              <i class="bi bi-trophy me-2"></i>
+              Our ensemble outperforms the baseline by
+              <strong>{{ "%.1f"|format((our_f1 - base_f1) * 100) }} F1 points</strong>.
+            </div>
+            {% elif our_f1 < base_f1 %}
+            <div class="alert alert-warning rounded-3 small mb-0">
+              <i class="bi bi-info-circle me-2"></i>
+              Baseline outperforms by {{ "%.1f"|format((base_f1 - our_f1) * 100) }} F1 points.
+              Consider adding more training data.
+            </div>
+            {% else %}
+            <div class="alert alert-info rounded-3 small mb-0">
+              Our model matches the baseline exactly. Excellent!
+            </div>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="card rounded-4 border-dashed text-center p-5 text-muted h-100 d-flex align-items-center justify-content-center">
+          <div>
+            <i class="bi bi-bar-chart fs-1 d-block mb-3 opacity-25"></i>
+            <p>Enter baseline metrics to see the comparison chart here.</p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Our metrics summary -->
+    {% if our_metrics %}
+    <div class="card shadow-sm rounded-4 mt-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3">Our Current Model Metrics</h2>
+        <div class="table-responsive">
+          <table class="table table-sm">
+            <thead class="table-light">
+              <tr>
+                <th>Platform</th>
+                <th>Accuracy</th>
+                <th>Precision</th>
+                <th>Recall</th>
+                <th>F1</th>
+                <th>CV Folds</th>
+                <th>Rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for p, m in our_metrics.items() %}
+              <tr>
+                <td class="fw-semibold text-capitalize">{{ p }}</td>
+                <td>
+                  {% if m.accuracy %}
+                  <span class="badge {% if m.accuracy >= 0.9 %}text-bg-success{% elif m.accuracy >= 0.75 %}text-bg-warning{% else %}text-bg-danger{% endif %}">
+                    {{ "%.1f"|format(m.accuracy * 100) }}%
+                  </span>
+                  {% else %}—{% endif %}
+                </td>
+                <td>{{ "%.3f"|format(m.precision) if m.precision else "—" }}</td>
+                <td>{{ "%.3f"|format(m.recall) if m.recall else "—" }}</td>
+                <td><strong>{{ "%.3f"|format(m.f1) if m.f1 else "—" }}</strong></td>
+                <td>{{ m.cv_folds or "—" }}</td>
+                <td>{{ m.rows or "—" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+  </div>
+</div>
+{% endblock %}

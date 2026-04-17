@@ -1,0 +1,161 @@
+/* ── CSS Variables for theming ─────────────────────────────────────────── */
+:root {
+  --card-bg: #ffffff;
+  --metric-bg: #f8f9fa;
+  --border-color: #dee2e6;
+  --text-muted-custom: #6c757d;
+  --navbar-bg: rgba(255,255,255,0.97);
+  --shadow-color: rgba(0,0,0,0.08);
+}
+
+[data-bs-theme="dark"] {
+  --card-bg: #1e1e2e;
+  --metric-bg: #2a2a3e;
+  --border-color: #3a3a5c;
+  --text-muted-custom: #9ca3af;
+  --navbar-bg: rgba(20,20,35,0.97);
+  --shadow-color: rgba(0,0,0,0.3);
+}
+
+/* ── Navbar ─────────────────────────────────────────────────────────────── */
+#main-navbar {
+  background: var(--navbar-bg) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 1px 12px var(--shadow-color);
+}
+
+/* ── Platform cards on the index page ─────────────────────────────────── */
+.platform-card {
+  transition: box-shadow 0.2s ease, transform 0.2s ease, border-color 0.2s ease;
+  cursor: default;
+}
+.platform-card:hover {
+  box-shadow: 0 6px 24px var(--shadow-color);
+  transform: translateY(-2px);
+}
+.platform-card.trained {
+  border-color: #198754 !important;
+}
+
+/* ── Metric boxes ──────────────────────────────────────────────────────── */
+.metric-box {
+  background: var(--metric-bg);
+  transition: background 0.2s ease;
+}
+
+/* ── Progress bars ─────────────────────────────────────────────────────── */
+.progress {
+  border-radius: 4px;
+  background-color: var(--metric-bg);
+}
+
+/* ── Cards ─────────────────────────────────────────────────────────────── */
+.card {
+  transition: box-shadow 0.2s ease;
+}
+
+/* ── DataTables overrides ─────────────────────────────────────────────── */
+#results-table_wrapper .dataTables_filter input,
+#abTable_wrapper .dataTables_filter input,
+#anomalyTable_wrapper .dataTables_filter input {
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-color);
+  padding: 0.25rem 0.5rem;
+}
+#results-table_wrapper .dataTables_length select,
+#abTable_wrapper .dataTables_length select {
+  border-radius: 0.375rem;
+  border: 1px solid var(--border-color);
+  padding: 0.25rem 0.5rem;
+}
+
+/* ── Gradient hero card ─────────────────────────────────────────────────── */
+.gradient-hero {
+  background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);
+}
+
+/* ── Code styling ───────────────────────────────────────────────────────── */
+code {
+  color: #d63384;
+  font-size: 0.875em;
+  background: var(--metric-bg);
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+}
+
+[data-bs-theme="dark"] code {
+  color: #f48fb1;
+}
+
+/* ── Badge tweaks ───────────────────────────────────────────────────────── */
+.badge {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* ── Table hover row highlight ─────────────────────────────────────────── */
+.table-hover tbody tr:hover {
+  background-color: var(--metric-bg) !important;
+}
+
+/* ── Border dashed (benchmark empty state) ─────────────────────────────── */
+.border-dashed {
+  border: 2px dashed var(--border-color) !important;
+}
+
+/* ── Smooth scroll ──────────────────────────────────────────────────────── */
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── Sticky sidebar on results page ────────────────────────────────────── */
+@media (min-width: 992px) {
+  .sticky-lg-top {
+    position: sticky;
+    z-index: 10;
+  }
+}
+
+/* ── Letter spacing helper ──────────────────────────────────────────────── */
+.letter-spacing-1 {
+  letter-spacing: 0.08em;
+}
+
+/* ── Network graph container ─────────────────────────────────────────────*/
+#network-graph {
+  background: var(--metric-bg);
+  border: 1px solid var(--border-color);
+}
+
+/* ── Indigo color for Discord ───────────────────────────────────────────── */
+.text-indigo { color: #5865F2 !important; }
+
+/* ── Dark mode — vis-network tooltip ────────────────────────────────────── */
+[data-bs-theme="dark"] .vis-tooltip {
+  background-color: #2a2a3e !important;
+  color: #e2e8f0 !important;
+  border-color: #3a3a5c !important;
+}
+
+/* ── Alert icons spacing ─────────────────────────────────────────────────── */
+.alert i { vertical-align: -0.1em; }
+
+/* ── Training progress bar ───────────────────────────────────────────────── */
+#trainProgress .progress-bar {
+  transition: width 0.5s ease;
+}
+
+/* ── Vis.js dark mode background fix ────────────────────────────────────── */
+[data-bs-theme="dark"] .vis-network canvas {
+  background-color: #1a1a2e !important;
+}
+
+/* ── Scrollbar thin ─────────────────────────────────────────────────────── */
+.table-responsive::-webkit-scrollbar { height: 6px; }
+.table-responsive::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+/* ── Footer ─────────────────────────────────────────────────────────────── */
+footer {
+  background: var(--metric-bg);
+}

@@ -1,0 +1,45 @@
+flask==3.0.3
+flask-wtf==1.2.1
+flask-login>=0.6.3
+flask-sqlalchemy>=3.1.0
+werkzeug==3.0.3
+pandas==2.2.2
+numpy>=1.26.0
+scikit-learn>=1.4.0
+xgboost>=2.0.0
+shap>=0.44.0
+joblib>=1.4.0
+matplotlib>=3.8.0
+fpdf2>=2.7.0
+openpyxl>=3.1.0
+flasgger>=0.9.7
+networkx>=3.2.0
+requests>=2.31.0
+# Enhanced ML features
+lightgbm>=4.0.0
+imbalanced-learn>=0.12.0
+python-louvain>=0.16
+simhash>=2.0.0
+textblob>=0.18.0
+nltk>=3.8.0
+langdetect>=1.0.9
+imagehash>=4.3.0
+Pillow>=10.0.0
+geopy>=2.4.0
+pytz>=2024.1
+jellyfish>=1.0.0
+python-dateutil>=2.9.0
+# Advanced ML & rate limiting
+flask-limiter>=3.5.0
+optuna>=3.5.0
+kaggle>=1.6.0
+# Live public profile scrapers (all free / no auth for public data)
+instaloader>=4.10.0     # Instagram public profiles (no auth)
+praw>=7.7.0             # Reddit API (free app registration)
+PyGithub>=2.1.0         # GitHub API (unauthenticated: 60 req/hr)
+ntscraper>=0.3.0        # Twitter/X via Nitter (no auth)
+# New dependencies for single-profile accuracy enhancement
+rapidfuzz>=3.6.0        # Fast Levenshtein / brand similarity
+imagehash>=4.3.0        # Perceptual hash for avatar deduplication
+Pillow>=10.0.0          # Image analysis
+onnxruntime>=1.17.0     # Optional: GAN face detection model

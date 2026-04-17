@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}Platform Comparison{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-11">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 class="h4 mb-1"><i class="bi bi-bar-chart-line me-2"></i>Platform Comparison</h1>
+        <p class="text-muted small">Side-by-side ML performance across all trained platforms.</p>
+      </div>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+    </div>
+
+    <!-- Comparison chart -->
+    {% if comp_chart %}
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3"><i class="bi bi-bar-chart me-2"></i>All Metrics — All Platforms</h2>
+        <img src="{{ url_for('static', filename=comp_chart) }}"
+             class="img-fluid rounded w-100">
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Platform cards grid -->
+    <div class="row g-3 mb-4">
+      {% for d in comparison_data %}
+      <div class="col-md-6 col-lg-4 col-xl-3">
+        <div class="card rounded-4 h-100 {% if d.trained %}border-success border-opacity-50{% else %}border-secondary border-opacity-25{% endif %}">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="fw-semibold text-capitalize">{{ d.platform }}</span>
+              {% if d.trained %}
+                <span class="badge text-bg-success">Ready</span>
+              {% else %}
+                <span class="badge text-bg-secondary">Untrained</span>
+              {% endif %}
+            </div>
+
+            {% if d.accuracy is not none %}
+            <div class="mb-1">
+              {% for metric, label, color in [
+                ('accuracy', 'Accuracy', 'primary'),
+                ('precision', 'Precision', 'success'),
+                ('recall', 'Recall', 'warning'),
+                ('f1', 'F1', 'info')
+              ] %}
+              {% set val = d[metric] %}
+              {% if val is not none %}
+              <div class="d-flex justify-content-between small mb-1">
+                <span class="text-muted">{{ label }}</span>
+                <span class="fw-semibold text-{{ color }}">{{ "%.1f"|format(val * 100) }}%</span>
+              </div>
+              <div class="progress mb-2" style="height:4px">
+                <div class="progress-bar bg-{{ color }}" style="width:{{ (val*100)|round }}%"></div>
+              </div>
+              {% endif %}
+              {% endfor %}
+            </div>
+            {% if d.rows %}
+            <div class="small text-muted mt-2">
+              <i class="bi bi-table me-1"></i>{{ d.rows }} training rows
+            </div>
+            {% endif %}
+            {% else %}
+            <div class="text-muted small py-3 text-center">
+              <i class="bi bi-cpu fs-4 d-block mb-1 opacity-25"></i>
+              No training data yet
+            </div>
+            {% endif %}
+
+            <div class="mt-3 d-flex gap-1">
+              <a href="{{ url_for('upload', platform=d.platform) }}" class="btn btn-sm btn-primary flex-fill">
+                Analyze
+              </a>
+              <a href="{{ url_for('train_platform', platform=d.platform) }}" class="btn btn-sm btn-outline-secondary flex-fill">
+                Train
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Summary stats table -->
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3"><i class="bi bi-table me-2"></i>Summary Table</h2>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle">
+            <thead class="table-light">
+              <tr>
+                <th>Platform</th>
+                <th>Status</th>
+                <th>Accuracy</th>
+                <th>Precision</th>
+                <th>Recall</th>
+                <th>F1 Score</th>
+                <th>Training Rows</th>
+                <th>Trained At</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for d in comparison_data %}
+              <tr>
+                <td class="fw-semibold text-capitalize">{{ d.platform }}</td>
+                <td>
+                  {% if d.trained %}
+                    <span class="badge text-bg-success">Ready</span>
+                  {% else %}
+                    <span class="badge text-bg-secondary">Untrained</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if d.accuracy is not none %}
+                  <span class="badge {% if d.accuracy >= 0.9 %}text-bg-success{% elif d.accuracy >= 0.75 %}text-bg-warning{% else %}text-bg-danger{% endif %}">
+                    {{ "%.1f"|format(d.accuracy * 100) }}%
+                  </span>
+                  {% else %}—{% endif %}
+                </td>
+                <td>{{ "%.3f"|format(d.precision) if d.precision is not none else "—" }}</td>
+                <td>{{ "%.3f"|format(d.recall) if d.recall is not none else "—" }}</td>
+                <td>
+                  {% if d.f1 is not none %}
+                  <strong>{{ "%.3f"|format(d.f1) }}</strong>
+                  {% else %}—{% endif %}
+                </td>
+                <td>{{ d.rows or "—" }}</td>
+                <td class="small text-muted">{{ d.trained_at or "—" }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

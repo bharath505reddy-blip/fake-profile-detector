@@ -1,0 +1,373 @@
+{
+  "instagram": [
+    {
+      "timestamp": "2026-03-28T07:04:44Z",
+      "rows": 30,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-03-28T07:44:17Z",
+      "rows": 30,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-03-28T07:46:01Z",
+      "rows": 20,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-03-28T15:47:00Z",
+      "rows": 5000,
+      "accuracy": 0.5,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-03-28T16:41:58Z",
+      "rows": 1200,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-03-28T18:15:36Z",
+      "rows": 500,
+      "accuracy": 0.56,
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1": 0.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:36:59Z",
+      "rows": 2400,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    },
+    {
+      "timestamp": "2026-04-06T19:39:15Z",
+      "rows": 2400,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    },
+    {
+      "timestamp": "2026-04-06T19:57:01Z",
+      "rows": 1000,
+      "accuracy": 0.977,
+      "precision": 0.975,
+      "recall": 0.987,
+      "f1": 0.981,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "discord": [
+    {
+      "timestamp": "2026-03-28T08:29:50Z",
+      "rows": 20,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-03-28T16:42:07Z",
+      "rows": 1000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:39:39Z",
+      "rows": 2000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "facebook": [
+    {
+      "timestamp": "2026-03-28T16:41:59Z",
+      "rows": 1000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:37:04Z",
+      "rows": 2000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    },
+    {
+      "timestamp": "2026-04-06T19:39:20Z",
+      "rows": 2000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "x": [
+    {
+      "timestamp": "2026-03-28T16:42:02Z",
+      "rows": 1400,
+      "accuracy": 0.999,
+      "precision": 0.999,
+      "recall": 1.0,
+      "f1": 0.999,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:37:10Z",
+      "rows": 2800,
+      "accuracy": 1.0,
+      "precision": 0.999,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    },
+    {
+      "timestamp": "2026-04-06T19:39:26Z",
+      "rows": 2800,
+      "accuracy": 1.0,
+      "precision": 0.999,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "linkedin": [
+    {
+      "timestamp": "2026-03-28T16:42:04Z",
+      "rows": 1000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:39:31Z",
+      "rows": 2000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "github": [
+    {
+      "timestamp": "2026-03-28T16:42:05Z",
+      "rows": 1100,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:39:35Z",
+      "rows": 2200,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    },
+    {
+      "timestamp": "2026-04-15T06:33:44Z",
+      "rows": 3000,
+      "accuracy": 0.98,
+      "precision": 0.983,
+      "recall": 0.968,
+      "f1": 0.975,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)"
+    }
+  ],
+  "youtube": [
+    {
+      "timestamp": "2026-03-28T16:42:09Z",
+      "rows": 1000,
+      "accuracy": 0.999,
+      "precision": 0.998,
+      "recall": 1.0,
+      "f1": 0.999,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:39:43Z",
+      "rows": 2000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "tiktok": [
+    {
+      "timestamp": "2026-03-28T16:42:11Z",
+      "rows": 1200,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:39:49Z",
+      "rows": 2400,
+      "accuracy": 1.0,
+      "precision": 0.999,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "reddit": [
+    {
+      "timestamp": "2026-03-28T16:42:13Z",
+      "rows": 1200,
+      "accuracy": 0.999,
+      "precision": 0.998,
+      "recall": 1.0,
+      "f1": 0.999,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:39:53Z",
+      "rows": 2400,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ],
+  "snapchat": [
+    {
+      "timestamp": "2026-03-28T16:42:15Z",
+      "rows": 1000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5
+    },
+    {
+      "timestamp": "2026-04-06T19:39:57Z",
+      "rows": 2000,
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "cv_folds": 5,
+      "cv_type": "stratified",
+      "balancing": "none",
+      "use_stacking": false,
+      "ensemble_type": "RF+SVM+XGB+HGB (voting)",
+      "use_optuna": false
+    }
+  ]
+}

@@ -1,0 +1,240 @@
+{% extends "base.html" %}
+{% block title %}Train {{ platform|capitalize }} Model{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-7">
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3">
+          <div>
+            <h1 class="h5 mb-1">
+              <i class="bi bi-cpu me-2 text-primary"></i>Train {{ platform|capitalize }} Model
+            </h1>
+            <p class="text-muted small mb-0">
+              Ensemble:
+              <strong>RF{% if xgboost_available %} + XGBoost{% endif %}{% if histgb_available %} + HGB{% endif %}{% if lightgbm_available %} + LightGBM{% endif %} + SVM</strong>
+              with 5-fold CV
+            </p>
+          </div>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+        </div>
+
+        <!-- Ensemble info -->
+        <div class="alert alert-primary rounded-4 d-flex gap-3 align-items-start mb-3">
+          <i class="bi bi-info-circle fs-5 mt-1 flex-shrink-0"></i>
+          <div>
+            <div class="fw-semibold mb-1">What gets trained?</div>
+            <div class="small">
+              {% if xgboost_available %}
+              Three models — <strong>Random Forest</strong>, <strong>XGBoost</strong>, and <strong>SVM</strong> —
+              are combined into a <strong>soft-voting ensemble</strong>.
+              {% else %}
+              Two models — <strong>Random Forest</strong> and <strong>SVM</strong> — are combined.
+              Install <code>xgboost</code> to enable the full 3-model ensemble.
+              {% endif %}
+              Feature importance and {% if shap_available %}SHAP explanations are{% else %}distribution charts are{% endif %}
+              auto-generated after training.
+            </div>
+          </div>
+        </div>
+
+        <div class="alert alert-light border rounded-4 small mb-3">
+          <strong>Required:</strong> CSV must have a label column — one of:
+          <code>label</code>, <code>is_fake</code>, <code>fake</code>,
+          <code>target</code>, <code>is_bot</code>, <code>bot</code>
+          &nbsp;(0 = Legit, 1 = Fake)
+        </div>
+
+        <form method="POST" enctype="multipart/form-data" id="trainForm" class="mt-3">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">CSV file(s)</label>
+            <input class="form-control" type="file" name="file" accept=".csv" multiple required id="csvInput">
+            <div class="form-text">
+              Select multiple files to merge. Max 20 MB per file.
+            </div>
+          </div>
+
+          <!-- File preview -->
+          <div id="filePreview" class="d-none mb-3">
+            <div class="small fw-semibold mb-1">Selected files:</div>
+            <div id="fileList" class="small text-muted"></div>
+          </div>
+
+          <!-- Progress bar (shown on submit) -->
+          <div id="trainProgress" class="d-none mb-3">
+            <div class="d-flex justify-content-between small mb-1">
+              <span>Training in progress...</span>
+              <span id="progressMsg">Preparing...</span>
+            </div>
+            <div class="progress" style="height: 10px; border-radius: 5px;">
+              <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated bg-primary"
+                   style="width: 0%"></div>
+            </div>
+          </div>
+
+          <!-- Advanced Training Options -->
+          <div class="accordion mb-3" id="advancedTraining">
+            <div class="accordion-item rounded-3 border">
+              <h2 class="accordion-header">
+                <button class="accordion-button collapsed rounded-3 py-2" type="button"
+                        data-bs-toggle="collapse" data-bs-target="#advancedOpts">
+                  <i class="bi bi-sliders me-2 text-primary"></i>
+                  <span class="fw-semibold small">Advanced Training Options</span>
+                </button>
+              </h2>
+              <div id="advancedOpts" class="accordion-collapse collapse">
+                <div class="accordion-body pt-2">
+                  <!-- Balancing Strategy -->
+                  <div class="mb-3">
+                    <label class="form-label fw-semibold small">Class Balancing Strategy</label>
+                    <select name="balancing_strategy" class="form-select form-select-sm">
+                      <option value="none" selected>None (use data as-is)</option>
+                      <option value="smote">SMOTE — Synthetic Minority Oversampling</option>
+                      <option value="adasyn">ADASYN — Adaptive Synthetic Sampling</option>
+                      <option value="class_weight">Class Weights (weighted loss)</option>
+                    </select>
+                    <div class="form-text">Balance class distribution to improve recall on minority class</div>
+                  </div>
+                  <!-- Use Stacking -->
+                  <div class="mb-2 form-check">
+                    <input type="checkbox" class="form-check-input" name="use_stacking"
+                           id="useStacking" value="1">
+                    <label class="form-check-label small" for="useStacking">
+                      <strong>Stacking Ensemble</strong>
+                      (RF + XGB + SVM + LightGBM → Logistic Regression meta-learner)
+                    </label>
+                    <div class="form-text">More powerful but slower to train</div>
+                  </div>
+                  <!-- Temporal CV -->
+                  <div class="mb-2 form-check">
+                    <input type="checkbox" class="form-check-input" name="use_temporal_cv"
+                           id="useTemporalCV" value="1">
+                    <label class="form-check-label small" for="useTemporalCV">
+                      <strong>Temporal Cross-Validation</strong> (TimeSeriesSplit)
+                    </label>
+                    <div class="form-text">Train on older data, validate on newer — more realistic evaluation</div>
+                  </div>
+                  <!-- Feature Selection -->
+                  <div class="mb-2 form-check">
+                    <input type="checkbox" class="form-check-input" name="use_feature_selection"
+                           id="useFeatureSel" value="1">
+                    <label class="form-check-label small" for="useFeatureSel">
+                      <strong>Automatic Feature Selection</strong> (RFE + correlation filter)
+                    </label>
+                    <div class="form-text">Drops low-importance and highly correlated features automatically</div>
+                  </div>
+                  <!-- Optuna Hyperparameter Tuning -->
+                  {% if optuna_available %}
+                  <div class="mb-2 form-check">
+                    <input type="checkbox" class="form-check-input" name="use_optuna"
+                           id="useOptuna" value="1" onchange="document.getElementById('optunaTrials').disabled = !this.checked">
+                    <label class="form-check-label small" for="useOptuna">
+                      <strong>Optuna Hyperparameter Tuning</strong>
+                      <span class="badge bg-warning text-dark ms-1">Advanced</span>
+                    </label>
+                    <div class="form-text">Automatically finds best RF/XGB hyperparameters (adds ~2–3 min)</div>
+                  </div>
+                  <div class="mb-0 ms-4">
+                    <label class="form-label small fw-semibold">Optuna Trials</label>
+                    <input type="number" name="optuna_trials" id="optunaTrials" class="form-control form-control-sm"
+                           value="40" min="10" max="200" style="max-width:120px" disabled>
+                    <div class="form-text">More trials = better tuning, longer wait</div>
+                  </div>
+                  {% else %}
+                  <div class="alert alert-light border small py-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Install <code>optuna</code> to enable hyperparameter tuning:
+                    <code>pip install optuna</code>
+                  </div>
+                  {% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary px-4" id="trainBtn" type="submit">
+              <i class="bi bi-cpu me-2"></i>Train &amp; Save Model
+            </button>
+            <a href="{{ url_for('download_template', platform=platform) }}"
+               class="btn btn-outline-secondary">
+              <i class="bi bi-download me-1"></i>Download CSV template
+            </a>
+            <a href="{{ url_for('dataset_stats', platform=platform) }}"
+               class="btn btn-outline-info">
+              <i class="bi bi-graph-up me-1"></i>Dataset Stats
+            </a>
+          </div>
+        </form>
+
+        <hr class="my-4">
+        <div class="row g-3 text-center small text-muted">
+          <div class="col-4">
+            <i class="bi bi-shield-check text-success fs-4 d-block mb-1"></i>
+            Cross-validated metrics
+          </div>
+          <div class="col-4">
+            <i class="bi bi-bar-chart-horizontal text-primary fs-4 d-block mb-1"></i>
+            Feature importance chart
+          </div>
+          <div class="col-4">
+            <i class="bi bi-graph-up text-warning fs-4 d-block mb-1"></i>
+            Distribution analysis
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// File preview
+document.getElementById('csvInput').addEventListener('change', function() {
+  const preview = document.getElementById('filePreview');
+  const fileList = document.getElementById('fileList');
+  if (this.files.length > 0) {
+    preview.classList.remove('d-none');
+    fileList.innerHTML = Array.from(this.files).map(f =>
+      `<span class="badge text-bg-secondary me-1 mb-1"><i class="bi bi-file-earmark-text me-1"></i>${f.name} (${(f.size/1024).toFixed(1)}KB)</span>`
+    ).join('');
+  } else {
+    preview.classList.add('d-none');
+  }
+});
+
+// Training progress animation
+document.getElementById('trainForm').addEventListener('submit', function() {
+  const btn = document.getElementById('trainBtn');
+  const progress = document.getElementById('trainProgress');
+  const bar = document.getElementById('progressBar');
+  const msg = document.getElementById('progressMsg');
+
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Training...';
+  progress.classList.remove('d-none');
+
+  const steps = [
+    { pct: 15, msg: 'Loading & merging CSVs...' },
+    { pct: 30, msg: 'Building features...' },
+    { pct: 50, msg: 'Running cross-validation...' },
+    { pct: 70, msg: 'Training Random Forest...' },
+    { pct: 85, msg: 'Training XGBoost + SVM...' },
+    { pct: 95, msg: 'Saving model & charts...' },
+  ];
+
+  let i = 0;
+  const interval = setInterval(() => {
+    if (i < steps.length) {
+      bar.style.width = steps[i].pct + '%';
+      msg.textContent = steps[i].msg;
+      i++;
+    } else {
+      clearInterval(interval);
+    }
+  }, 800);
+});
+</script>
+{% endblock %}

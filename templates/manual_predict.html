@@ -1,0 +1,742 @@
+{% extends "base.html" %}
+{% block title %}{{ platform|capitalize }} — Single Profile Check{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-8">
+
+    <!-- Result card -->
+    {% if result %}
+    <div class="card shadow-sm rounded-4 mb-4
+      {% if result == 'Fake' %}border-danger border-2{% else %}border-success border-2{% endif %}">
+      <div class="card-body p-4 text-center">
+
+        <!-- Analysis depth badge -->
+        {% if analysis_depth %}
+        <div class="mb-2">
+          {% if analysis_depth == 'deep' %}
+          <span class="badge bg-primary"><i class="bi bi-layers me-1"></i>Deep Analysis</span>
+          {% else %}
+          <span class="badge bg-secondary"><i class="bi bi-lightning me-1"></i>Quick Scan</span>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="mb-1 text-muted small text-uppercase letter-spacing-1">Prediction Result</div>
+        {% if result == "Fake" %}
+          <div class="display-4 fw-bold text-danger">
+            <i class="bi bi-x-circle me-2"></i>Fake
+          </div>
+        {% else %}
+          <div class="display-4 fw-bold text-success">
+            <i class="bi bi-check-circle me-2"></i>Legit
+          </div>
+        {% endif %}
+
+        {% if confidence is not none %}
+          <div class="mt-2 text-muted">
+            Confidence:
+            <strong class="fs-5 {% if result == 'Fake' %}text-danger{% else %}text-success{% endif %}">
+              {{ confidence }}%
+            </strong>
+            {% if confidence_label %}
+            <span class="badge bg-light text-dark border ms-1">{{ confidence_label }}</span>
+            {% endif %}
+          </div>
+          <div class="progress mt-2 mx-auto" style="height:10px;max-width:300px;border-radius:5px;">
+            <div class="progress-bar {% if result == 'Fake' %}bg-danger{% else %}bg-success{% endif %}"
+              style="width:{{ confidence }}%">
+            </div>
+          </div>
+          <div class="mt-2 small text-muted">
+            {% if result == "Fake" %}
+              <i class="bi bi-exclamation-triangle text-warning me-1"></i>
+              This profile shows characteristics consistent with fake/bot accounts.
+            {% else %}
+              <i class="bi bi-check2 text-success me-1"></i>
+              This profile appears to be a genuine account.
+            {% endif %}
+          </div>
+        {% endif %}
+
+        <!-- Deep analysis trigger button (when quick scan is uncertain) -->
+        {% if not analysis_depth or analysis_depth == 'quick' %}
+        {% if confidence and confidence > 40 and confidence < 80 %}
+        <div class="mt-3">
+          <button class="btn btn-primary btn-sm" id="deepAnalysisBtn" type="button">
+            <i class="bi bi-layers me-1"></i>Run Deep Analysis
+          </button>
+          <p class="text-muted small mt-1">Quick scan uncertainty detected — deep analysis may improve accuracy.</p>
+        </div>
+        {% endif %}
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Confidence breakdown panel -->
+    {% if confidence_explanation %}
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h6 mb-0">
+            <i class="bi bi-bar-chart-line me-2 text-primary"></i>Confidence Breakdown
+          </h2>
+          {% if confidence_explanation.signal_count_total %}
+          <span class="badge bg-secondary">
+            {{ confidence_explanation.signal_count_agreeing }}/{{ confidence_explanation.signal_count_total }} signals agree
+          </span>
+          {% endif %}
+        </div>
+
+        <!-- Data coverage bar -->
+        {% if confidence_explanation.data_coverage_pct is not none %}
+        <div class="mb-3">
+          <div class="d-flex justify-content-between small text-muted mb-1">
+            <span>Data Coverage</span>
+            <span>{{ confidence_explanation.data_coverage_pct|round|int }}%</span>
+          </div>
+          <div class="progress" style="height:8px;border-radius:4px;">
+            <div class="progress-bar
+              {% if confidence_explanation.data_coverage_pct >= 70 %}bg-success
+              {% elif confidence_explanation.data_coverage_pct >= 40 %}bg-warning
+              {% else %}bg-danger{% endif %}"
+              style="width:{{ confidence_explanation.data_coverage_pct }}%">
+            </div>
+          </div>
+          {% if confidence_explanation.data_coverage_pct < 50 %}
+          <div class="small text-muted mt-1">
+            <i class="bi bi-info-circle me-1"></i>Low data coverage may reduce prediction accuracy.
+          </div>
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="row g-3">
+          <!-- Strong signals -->
+          {% if confidence_explanation.strong_signals %}
+          <div class="col-md-6">
+            <h3 class="small fw-semibold text-muted mb-2">
+              <i class="bi bi-check-circle-fill text-success me-1"></i>Strong Signals
+            </h3>
+            <ul class="list-unstyled mb-0">
+              {% for sig in confidence_explanation.strong_signals %}
+              <li class="small mb-1">
+                <span class="text-success me-1">✓</span>{{ sig }}
+              </li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          <!-- Weak / missing signals -->
+          {% if confidence_explanation.weak_signals or confidence_explanation.missing_signals %}
+          <div class="col-md-6">
+            {% if confidence_explanation.weak_signals %}
+            <h3 class="small fw-semibold text-muted mb-2">
+              <i class="bi bi-dash-circle text-warning me-1"></i>Weak / Inconclusive
+            </h3>
+            <ul class="list-unstyled mb-0">
+              {% for sig in confidence_explanation.weak_signals %}
+              <li class="small mb-1">
+                <span class="text-warning me-1">–</span>{{ sig }}
+              </li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+            {% if confidence_explanation.missing_signals %}
+            <h3 class="small fw-semibold text-muted mt-2 mb-2">
+              <i class="bi bi-question-circle text-secondary me-1"></i>Missing Data
+            </h3>
+            <ul class="list-unstyled mb-0">
+              {% for sig in confidence_explanation.missing_signals %}
+              <li class="small mb-1 text-muted">
+                <span class="me-1">?</span>{{ sig }}
+              </li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+          </div>
+          {% endif %}
+        </div>
+
+        <!-- Improvement tips -->
+        {% if confidence_explanation.improvement_tips %}
+        <div class="mt-3 pt-3 border-top">
+          <h3 class="small fw-semibold text-muted mb-2">
+            <i class="bi bi-lightbulb text-warning me-1"></i>How to improve accuracy
+          </h3>
+          <ul class="list-unstyled mb-0">
+            {% for tip in confidence_explanation.improvement_tips %}
+            <li class="small mb-1 text-muted">
+              <i class="bi bi-arrow-right me-1"></i>{{ tip }}
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Improvement wizard trigger (shown when confidence < 70%) -->
+    {% if result and confidence is not none and confidence < 70 %}
+    <div class="alert alert-info rounded-4 mb-4 d-flex align-items-center gap-3">
+      <i class="bi bi-magic fs-4 text-info flex-shrink-0"></i>
+      <div class="flex-grow-1">
+        <strong>Low confidence detected.</strong>
+        Providing more profile details can significantly improve accuracy.
+      </div>
+      <button class="btn btn-sm btn-outline-info flex-shrink-0" data-bs-toggle="modal" data-bs-target="#improvementWizard">
+        <i class="bi bi-arrow-right me-1"></i>Improve
+      </button>
+    </div>
+
+    <!-- Improvement Wizard Modal -->
+    <div class="modal fade" id="improvementWizard" tabindex="-1" aria-labelledby="wizardLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content rounded-4">
+          <div class="modal-header border-0 pb-0">
+            <h5 class="modal-title" id="wizardLabel">
+              <i class="bi bi-magic me-2 text-info"></i>Confidence Improvement Wizard
+            </h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <p class="text-muted small mb-3">
+              Current confidence: <strong>{{ confidence }}%</strong>.
+              Fill in the fields below to help the model make a more accurate prediction.
+            </p>
+
+            <div class="row g-3" id="wizardFields">
+              {% set missing_fields = [] %}
+              {% for field, ftype in fields %}
+                {% if not form_data.get(field) or form_data.get(field) == '0' %}
+                  {% set _ = missing_fields.append((field, ftype)) %}
+                {% endif %}
+              {% endfor %}
+
+              {% for field, ftype in missing_fields[:8] %}
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold text-capitalize">
+                  {{ field.replace("_", " ") }}
+                </label>
+                {% if ftype == "checkbox" %}
+                <div class="form-check form-switch">
+                  <input class="form-check-input wizard-field" type="checkbox"
+                         name="{{ field }}" id="wiz_{{ field }}">
+                  <label class="form-check-label small" for="wiz_{{ field }}">Yes</label>
+                </div>
+                {% elif ftype == "number" %}
+                <input class="form-control form-control-sm wizard-field" type="number"
+                       step="any" name="{{ field }}" id="wiz_{{ field }}" placeholder="0">
+                {% else %}
+                <input class="form-control form-control-sm wizard-field" type="text"
+                       name="{{ field }}" id="wiz_{{ field }}"
+                       placeholder="{{ field.replace('_', ' ') }}">
+                {% endif %}
+              </div>
+              {% endfor %}
+            </div>
+
+            {% if not missing_fields %}
+            <div class="alert alert-success rounded-3 mb-0">
+              <i class="bi bi-check-circle me-2"></i>
+              All fields are already filled in. The low confidence may be due to ambiguous profile signals.
+            </div>
+            {% endif %}
+          </div>
+          <div class="modal-footer border-0 pt-0">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            {% if missing_fields %}
+            <button type="button" class="btn btn-primary" id="wizardApplyBtn">
+              <i class="bi bi-arrow-clockwise me-1"></i>Re-check with these fields
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Deep analysis progress panel (hidden initially) -->
+    <div id="deepProgressPanel" class="card shadow-sm rounded-4 mb-4 d-none">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3"><i class="bi bi-hourglass-split me-2 text-primary"></i>Deep Analysis In Progress</h2>
+        <div id="deepProgressSteps" class="list-group list-group-flush">
+          <div class="list-group-item border-0 ps-0 text-muted small">
+            <span class="spinner-border spinner-border-sm me-2"></span>Initializing...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Deep analysis result (rendered after JS call) -->
+    <div id="deepResultPanel" class="d-none">
+      <div class="card shadow-sm rounded-4 mb-4" id="deepResultCard">
+        <!-- Filled by JS -->
+      </div>
+    </div>
+
+    <!-- SHAP explanation -->
+    {% if shap_chart %}
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-1">
+          <i class="bi bi-lightbulb text-warning me-2"></i>Why this prediction? (SHAP Explanation)
+        </h2>
+        <p class="small text-muted mb-3">
+          Red bars push toward <strong class="text-danger">Fake</strong>.
+          Green bars push toward <strong class="text-success">Legit</strong>.
+        </p>
+        <img src="{{ url_for('static', filename=shap_chart) }}"
+             class="img-fluid rounded" style="max-height:300px; width:100%; object-fit:contain;">
+      </div>
+    </div>
+    {% elif shap_available %}
+    <div class="alert alert-info rounded-4 mb-4">
+      <i class="bi bi-lightbulb me-2"></i>
+      SHAP explanation will appear here after prediction. Train the model first.
+    </div>
+    {% endif %}
+
+    <!-- Cross-platform results -->
+    {% if cross_platform %}
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3"><i class="bi bi-diagram-3 me-2 text-info"></i>Cross-Platform Identity Check</h2>
+        <div class="row g-2 mb-3">
+          <div class="col-6 col-md-3 text-center">
+            <div class="h4 mb-0 text-primary">{{ cross_platform.platforms_found_count }}</div>
+            <div class="small text-muted">Platforms Found</div>
+          </div>
+          <div class="col-6 col-md-3 text-center">
+            <div class="h4 mb-0 text-secondary">{{ cross_platform.platforms_checked_count }}</div>
+            <div class="small text-muted">Platforms Checked</div>
+          </div>
+          <div class="col-6 col-md-3 text-center">
+            <div class="h4 mb-0 {% if cross_platform.overall_consistency_score > 0.7 %}text-success{% elif cross_platform.overall_consistency_score > 0.4 %}text-warning{% else %}text-danger{% endif %}">
+              {{ "%.0f"|format(cross_platform.overall_consistency_score * 100) }}%
+            </div>
+            <div class="small text-muted">Consistency Score</div>
+          </div>
+          <div class="col-6 col-md-3 text-center">
+            <div class="h4 mb-0">{{ "%.0f"|format(cross_platform.bio_similarity_score * 100) }}%</div>
+            <div class="small text-muted">Bio Similarity</div>
+          </div>
+        </div>
+        {% if cross_platform.platform_list %}
+        <div class="d-flex flex-wrap gap-2">
+          {% for p in cross_platform.platform_list %}
+          <span class="badge bg-success bg-opacity-15 text-success border border-success"><i class="bi bi-check-circle me-1"></i>{{ p }}</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Photo analysis results -->
+    {% if photo_features and photo_features.photo_available %}
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3"><i class="bi bi-camera me-2 text-secondary"></i>Avatar Analysis</h2>
+        <div class="d-flex flex-wrap gap-3">
+          {% if photo_features.photo_is_default_avatar is not none %}
+          <div class="text-center">
+            <div class="{% if photo_features.photo_is_default_avatar %}text-warning{% else %}text-success{% endif %}">
+              <i class="bi {% if photo_features.photo_is_default_avatar %}bi-exclamation-circle{% else %}bi-check-circle{% endif %} fs-4"></i>
+            </div>
+            <div class="small text-muted">Default Avatar: {{ "Yes" if photo_features.photo_is_default_avatar else "No" }}</div>
+          </div>
+          {% endif %}
+          {% if photo_features.photo_stock_score is not none %}
+          <div class="text-center">
+            <div class="{% if photo_features.photo_stock_score > 0.5 %}text-danger{% elif photo_features.photo_stock_score > 0.2 %}text-warning{% else %}text-success{% endif %}">
+              <i class="bi bi-images fs-4"></i>
+            </div>
+            <div class="small text-muted">Stock Score: {{ "%.0f"|format(photo_features.photo_stock_score * 100) }}%</div>
+          </div>
+          {% endif %}
+          {% if photo_features.photo_ai_generated_score is not none %}
+          <div class="text-center">
+            <div class="{% if photo_features.photo_ai_generated_score > 0.6 %}text-danger{% elif photo_features.photo_ai_generated_score > 0.3 %}text-warning{% else %}text-success{% endif %}">
+              <i class="bi bi-robot fs-4"></i>
+            </div>
+            <div class="small text-muted">AI-Generated: {{ "%.0f"|format(photo_features.photo_ai_generated_score * 100) }}%</div>
+          </div>
+          {% endif %}
+          {% if photo_features.photo_seen_count is not none and photo_features.photo_seen_count > 1 %}
+          <div class="text-center">
+            <div class="{% if photo_features.photo_seen_count > 3 %}text-danger{% else %}text-warning{% endif %}">
+              <i class="bi bi-exclamation-triangle fs-4"></i>
+            </div>
+            <div class="small text-muted">Seen {{ photo_features.photo_seen_count }}x in DB</div>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Username & bio forensic signals -->
+    {% if username_features or bio_features %}
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3"><i class="bi bi-fingerprint me-2 text-secondary"></i>Forensic Signals</h2>
+        <div class="row g-3">
+          {% if username_features %}
+          <div class="col-md-6">
+            <h3 class="h6 text-muted small mb-2">Username</h3>
+            <table class="table table-sm table-borderless mb-0">
+              {% if username_features.uname_bot_pattern_count is not none %}
+              <tr><td class="text-muted small">Bot patterns matched</td>
+                  <td class="fw-semibold {% if username_features.uname_bot_pattern_count > 0 %}text-danger{% else %}text-success{% endif %}">{{ username_features.uname_bot_pattern_count }}</td></tr>
+              {% endif %}
+              {% if username_features.uname_entropy is not none %}
+              <tr><td class="text-muted small">Entropy</td>
+                  <td class="fw-semibold">{{ "%.2f"|format(username_features.uname_entropy) }}</td></tr>
+              {% endif %}
+              {% if username_features.uname_dict_coverage is not none %}
+              <tr><td class="text-muted small">Dictionary coverage</td>
+                  <td class="fw-semibold">{{ "%.0f"|format(username_features.uname_dict_coverage * 100) }}%</td></tr>
+              {% endif %}
+              {% if username_features.uname_brand_distance is not none and username_features.uname_brand_distance < 3 %}
+              <tr><td class="text-muted small">Brand similarity</td>
+                  <td class="fw-semibold text-warning">Close to "{{ username_features.uname_brand_closest }}"</td></tr>
+              {% endif %}
+            </table>
+          </div>
+          {% endif %}
+          {% if bio_features %}
+          <div class="col-md-6">
+            <h3 class="h6 text-muted small mb-2">Bio</h3>
+            <table class="table table-sm table-borderless mb-0">
+              {% if bio_features.bio_spam_score is not none %}
+              <tr><td class="text-muted small">Spam score</td>
+                  <td class="fw-semibold {% if bio_features.bio_spam_score > 0.3 %}text-danger{% elif bio_features.bio_spam_score > 0.1 %}text-warning{% else %}text-success{% endif %}">
+                    {{ "%.2f"|format(bio_features.bio_spam_score) }}</td></tr>
+              {% endif %}
+              {% if bio_features.bio_template_similarity is not none %}
+              <tr><td class="text-muted small">Template similarity</td>
+                  <td class="fw-semibold {% if bio_features.bio_template_similarity > 0.5 %}text-danger{% else %}text-muted{% endif %}">
+                    {{ "%.0f"|format(bio_features.bio_template_similarity * 100) }}%</td></tr>
+              {% endif %}
+              {% if bio_features.bio_emoji_count is not none %}
+              <tr><td class="text-muted small">Emoji count</td>
+                  <td class="fw-semibold">{{ bio_features.bio_emoji_count }}</td></tr>
+              {% endif %}
+              {% if bio_features.bio_phone_present %}
+              <tr><td class="text-muted small">Phone detected</td>
+                  <td class="fw-semibold text-warning">Yes</td></tr>
+              {% endif %}
+            </table>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    {% endif %}{# end if result #}
+
+    <!-- Form card -->
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h1 class="h5 mb-0 text-capitalize">
+            <i class="bi bi-person-search me-2"></i>{{ platform }} — Single Profile Check
+          </h1>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+        </div>
+
+        <p class="text-muted small mb-3">
+          Enter profile details manually{% if live_lookup %} or use <strong>Live Lookup</strong> to auto-fill from the API{% endif %}.
+          A trained model must exist for this platform.
+        </p>
+
+        <!-- Live lookup -->
+        {% if live_lookup %}
+        <div class="card bg-info bg-opacity-10 border-info rounded-4 mb-3">
+          <div class="card-body p-3">
+            <div class="fw-semibold small mb-2">
+              <i class="bi bi-wifi me-1 text-info"></i>Live Profile Lookup
+              {% if not api_key_configured %}
+              <span class="badge bg-warning text-dark ms-1">
+                <i class="bi bi-exclamation-triangle me-1"></i>API key not configured
+              </span>
+              {% endif %}
+            </div>
+            <div class="input-group input-group-sm">
+              <input type="text" id="lookupInput" class="form-control rounded-start"
+                     placeholder="Enter {{ platform }} username..." />
+              <button class="btn btn-info text-white" id="lookupBtn" type="button"
+                      {% if not api_key_configured and platform not in ['github','reddit'] %}
+                      title="Configure API key in Admin → API Keys"{% endif %}>
+                <i class="bi bi-search me-1"></i>Fetch Profile
+              </button>
+            </div>
+            <div id="lookupStatus" class="small mt-2 text-muted d-none"></div>
+            <div id="fieldsFilledBadge" class="mt-1 d-none">
+              <span class="badge bg-success" id="fieldsFilledCount"></span>
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        <form method="POST" id="predictForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+          <div class="row g-3">
+            {% for field, ftype in fields %}
+            <div class="col-md-6">
+              <label class="form-label fw-semibold text-capitalize d-flex align-items-center gap-1">
+                {{ field.replace("_", " ") }}
+                {% set desc = feature_descriptions.get(field) %}
+                {% if desc %}
+                <i class="bi bi-question-circle text-muted small"
+                   data-bs-toggle="tooltip"
+                   title="{{ desc }}"></i>
+                {% endif %}
+              </label>
+              {% if ftype == "checkbox" %}
+                <div class="form-check form-switch mt-1">
+                  <input class="form-check-input" type="checkbox" name="{{ field }}" id="{{ field }}"
+                    {% if form_data.get(field) %}checked{% endif %}>
+                  <label class="form-check-label" for="{{ field }}">Yes</label>
+                </div>
+              {% elif ftype == "number" %}
+                <input class="form-control" type="number" step="any" name="{{ field }}"
+                       id="f_{{ field }}"
+                       value="{{ form_data.get(field, '') }}"
+                       placeholder="0">
+              {% else %}
+                <input class="form-control" type="text" name="{{ field }}"
+                       id="f_{{ field }}"
+                       value="{{ form_data.get(field, '') }}"
+                       placeholder="{{ field.replace('_', ' ') }}">
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+
+          <div class="d-flex gap-2 mt-4">
+            <button class="btn btn-primary px-4" type="submit">
+              <i class="bi bi-search me-2"></i>Check Profile
+            </button>
+            <button class="btn btn-outline-secondary" type="reset">Reset</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if live_lookup %}
+<script>
+document.getElementById('lookupBtn').addEventListener('click', function() {
+  const username = document.getElementById('lookupInput').value.trim();
+  if (!username) return;
+
+  const btn = this;
+  const status = document.getElementById('lookupStatus');
+  const badge = document.getElementById('fieldsFilledBadge');
+  const badgeCount = document.getElementById('fieldsFilledCount');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Fetching...';
+  status.className = 'small mt-2 text-muted';
+  status.textContent = 'Fetching profile data...';
+  status.classList.remove('d-none');
+  badge.classList.add('d-none');
+
+  const platform = '{{ platform }}';
+  fetch(`/api/live/${platform}/${encodeURIComponent(username)}`)
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) {
+        status.className = 'small mt-2 text-danger';
+        status.textContent = '✗ ' + data.error;
+      } else {
+        const feat = data.features || {};
+        const fieldMap = {
+          'username': data.username || data.name || username,
+          'name': data.name || data.username || username,
+          'followers': data.followers,
+          'following': data.following,
+          'public_repos': data.public_repos || feat.public_repos,
+          'public_gists': data.public_gists !== undefined ? data.public_gists : feat.public_gists,
+          'account_age_days': data.account_age_days !== undefined ? data.account_age_days : feat.account_age_days,
+          'bio': data.bio || data.about || data.description || feat.bio || '',
+          'karma': data.karma,
+          'created_at': data.created_at || '',
+          'about': data.about || data.bio || data.description || feat.about || '',
+          'subscribers': data.subscribers || feat.subscribers,
+          'videos': data.videos || feat.videos,
+          'has_avatar': data.has_avatar !== undefined ? (data.has_avatar ? 1 : 0) : undefined,
+          'suspicion_score': data.suspicion_score,
+          'connections': data.connections || feat.connections,
+          'headline': data.headline || feat.headline,
+          'channel_name': data.channel_name || feat.channel_name,
+          'tweets': data.tweets || feat.tweets,
+          'posts': data.posts || feat.posts,
+          'score': data.score || feat.score,
+        };
+        let filled = 0;
+        Object.entries(fieldMap).forEach(([field, val]) => {
+          const el = document.getElementById('f_' + field);
+          if (el && val !== undefined && val !== null && val !== '') {
+            el.value = val;
+            filled++;
+          }
+        });
+        // Checkboxes
+        const avatarEl = document.getElementById('has_avatar');
+        if (avatarEl && data.has_avatar !== undefined) {
+          avatarEl.checked = !!data.has_avatar;
+        }
+        status.className = 'small mt-2 text-success';
+        status.textContent = `✓ Profile loaded: @${data.username || data.channel_name || username}`;
+        if (data.completeness !== undefined) {
+          status.textContent += ` (${Math.round(data.completeness * 100)}% data completeness)`;
+        }
+        badgeCount.textContent = `Fetched ${filled} fields`;
+        badge.classList.remove('d-none');
+      }
+    })
+    .catch(err => {
+      status.className = 'small mt-2 text-danger';
+      status.textContent = '✗ Network error: ' + err;
+    })
+    .finally(() => {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="bi bi-search me-1"></i>Fetch Profile';
+    });
+});
+</script>
+{% endif %}
+
+{% if result and (not analysis_depth or analysis_depth == 'quick') %}
+{% set conf_val = confidence|default(50)|float %}
+{% if conf_val > 40 and conf_val < 80 %}
+<script>
+const deepBtn = document.getElementById('deepAnalysisBtn');
+const progressPanel = document.getElementById('deepProgressPanel');
+const progressSteps = document.getElementById('deepProgressSteps');
+const resultPanel = document.getElementById('deepResultPanel');
+const resultCard = document.getElementById('deepResultCard');
+
+if (deepBtn) {
+  deepBtn.addEventListener('click', function() {
+    deepBtn.disabled = true;
+    deepBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing...';
+    progressPanel.classList.remove('d-none');
+
+    // Collect form data
+    const formData = {};
+    document.querySelectorAll('#predictForm input, #predictForm select, #predictForm textarea').forEach(el => {
+      if (el.name && el.name !== 'csrf_token') {
+        if (el.type === 'checkbox') {
+          formData[el.name] = el.checked ? 1 : 0;
+        } else {
+          formData[el.name] = el.value;
+        }
+      }
+    });
+
+    const platform = '{{ platform }}';
+    const csrfToken = document.querySelector('[name=csrf_token]').value;
+
+    progressSteps.innerHTML = `
+      <div class="list-group-item border-0 ps-0 text-muted small">
+        <span class="spinner-border spinner-border-sm me-2"></span>Running deep analysis...
+      </div>`;
+
+    fetch(`/predict-deep/${platform}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+      body: JSON.stringify(formData),
+    })
+    .then(r => r.json())
+    .then(data => {
+      progressPanel.classList.add('d-none');
+      if (data.error) {
+        resultCard.innerHTML = `<div class="card-body p-4 text-danger"><i class="bi bi-x-circle me-2"></i>${data.error}</div>`;
+      } else {
+        const isF = data.label === 'Fake';
+        const color = isF ? 'danger' : 'success';
+        const icon = isF ? 'x-circle' : 'check-circle';
+        const depthBadge = data.analysis_depth === 'deep'
+          ? '<span class="badge bg-primary me-2"><i class="bi bi-layers me-1"></i>Deep Analysis</span>'
+          : '<span class="badge bg-secondary me-2"><i class="bi bi-lightning me-1"></i>Quick</span>';
+        let stepsHtml = '';
+        if (data.enrichment_summary) {
+          const s = data.enrichment_summary;
+          if (s.live_completeness !== undefined)
+            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Live data fetched (${Math.round(s.live_completeness*100)}% complete)</li>`;
+          if (s.photo_analyzed)
+            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Photo analyzed</li>`;
+          if (s.behavioral_posts)
+            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Behavioral fingerprint: ${s.behavioral_posts} posts</li>`;
+          if (s.platforms_found !== undefined)
+            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Cross-platform: found on ${s.platforms_found} other platforms</li>`;
+          if (s.extra_features_added)
+            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-plus-circle text-primary me-2"></i>${s.extra_features_added} extra features added</li>`;
+          if (s.total_time_s)
+            stepsHtml += `<li class="list-group-item border-0 ps-0 small text-muted"><i class="bi bi-clock me-2"></i>Completed in ${s.total_time_s}s</li>`;
+        }
+        resultCard.innerHTML = `
+          <div class="card-body p-4">
+            <div class="text-center mb-3">
+              ${depthBadge}
+              <div class="display-5 fw-bold text-${color} mt-2">
+                <i class="bi bi-${icon} me-2"></i>${data.label}
+              </div>
+              <div class="mt-2">Confidence: <strong class="text-${color}">${(data.confidence||0).toFixed(1)}%</strong>
+                ${data.confidence_label ? `<span class="badge bg-light text-dark border ms-1">${data.confidence_label}</span>` : ''}
+              </div>
+              <div class="progress mt-2 mx-auto" style="height:10px;max-width:300px;border-radius:5px;">
+                <div class="progress-bar bg-${color}" style="width:${data.confidence||0}%"></div>
+              </div>
+            </div>
+            ${stepsHtml ? `<h6 class="small text-muted mt-3 mb-2">Analysis Steps</h6><ul class="list-group list-group-flush">${stepsHtml}</ul>` : ''}
+          </div>`;
+      }
+      resultPanel.classList.remove('d-none');
+    })
+    .catch(err => {
+      progressPanel.classList.add('d-none');
+      resultCard.innerHTML = `<div class="card-body p-4 text-danger"><i class="bi bi-x-circle me-2"></i>Network error: ${err}</div>`;
+      resultPanel.classList.remove('d-none');
+    });
+  });
+}
+</script>
+{% endif %}
+{% endif %}
+
+{% if result and confidence is not none and confidence < 70 %}
+<script>
+const wizardApplyBtn = document.getElementById('wizardApplyBtn');
+if (wizardApplyBtn) {
+  wizardApplyBtn.addEventListener('click', function() {
+    // Copy wizard field values into the main form, then submit
+    document.querySelectorAll('.wizard-field').forEach(el => {
+      const mainEl = document.getElementById('f_' + el.name) || document.getElementById(el.name);
+      if (mainEl) {
+        if (el.type === 'checkbox') {
+          mainEl.checked = el.checked;
+        } else if (el.value.trim() !== '') {
+          mainEl.value = el.value.trim();
+        }
+      }
+    });
+    // Close modal then submit
+    const modal = bootstrap.Modal.getInstance(document.getElementById('improvementWizard'));
+    if (modal) modal.hide();
+    document.getElementById('predictForm').submit();
+  });
+}
+</script>
+{% endif %}
+{% endblock %}

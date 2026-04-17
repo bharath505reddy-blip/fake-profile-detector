@@ -1,0 +1,86 @@
+# Known brand / celebrity names used for impersonation detection
+# One name per line, lowercase, no punctuation
+
+# Tech companies
+google
+apple
+microsoft
+amazon
+meta
+facebook
+instagram
+twitter
+youtube
+netflix
+spotify
+tiktok
+snapchat
+discord
+reddit
+linkedin
+github
+stripe
+shopify
+salesforce
+openai
+anthropic
+nvidia
+intel
+amd
+samsung
+sony
+lg
+huawei
+xiaomi
+tesla
+spacex
+
+# Finance / Crypto
+paypal
+binance
+coinbase
+kraken
+opensea
+robinhood
+visa
+mastercard
+
+# Retail / Consumer
+nike
+adidas
+puma
+gucci
+prada
+louis vuitton
+chanel
+rolex
+ferrari
+porsche
+lamborghini
+mcdonald
+starbucks
+amazon
+walmart
+
+# Celebrities / Public figures (commonly impersonated)
+elonmusk
+musk
+trump
+biden
+obama
+oprah
+taylorswift
+beyonce
+rihanna
+cristiano
+ronaldo
+messi
+drake
+eminem
+justinbieber
+kimkardashian
+kanyewest
+markzuckerberg
+billgates
+jeffbezos
+warren buffett

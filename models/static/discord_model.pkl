@@ -1,0 +1,6 @@
+predict_discord(
+    df=df,
+    model_path=DISCORD_MODEL_PATH,
+    charts_dir=CHARTS_DIR,
+    tag=tag
+)

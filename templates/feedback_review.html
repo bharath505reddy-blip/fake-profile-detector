@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Feedback Review — FakeProfileAI{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h4 mb-1">
+      <i class="bi bi-hand-thumbs-up me-2 text-success"></i>Feedback Review
+    </h1>
+    <p class="text-muted small mb-0">Review and correct model predictions to improve future accuracy</p>
+  </div>
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back
+  </a>
+</div>
+
+<!-- Stats row -->
+{% if feedback_stats %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card rounded-4 shadow-sm text-center border-0 bg-primary bg-opacity-10">
+      <div class="card-body py-3">
+        <div class="h4 mb-0 fw-bold text-primary">{{ feedback_stats.total_feedback }}</div>
+        <div class="small text-muted">Total Feedback</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card rounded-4 shadow-sm text-center border-0 bg-warning bg-opacity-10">
+      <div class="card-body py-3">
+        <div class="h4 mb-0 fw-bold text-warning">{{ feedback_stats.pending_reviews }}</div>
+        <div class="small text-muted">Pending Reviews</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card rounded-4 shadow-sm text-center border-0 bg-danger bg-opacity-10">
+      <div class="card-body py-3">
+        <div class="h4 mb-0 fw-bold text-danger">{{ (feedback_stats.correction_rate * 100)|round(1) }}%</div>
+        <div class="small text-muted">Correction Rate</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card rounded-4 shadow-sm text-center border-0 bg-success bg-opacity-10">
+      <div class="card-body py-3">
+        <div class="h4 mb-0 fw-bold text-success">{{ feedback_stats.platforms_dict|length }}</div>
+        <div class="small text-muted">Platforms Active</div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if feedback_entries %}
+<!-- Filter bar -->
+<div class="card rounded-4 shadow-sm mb-3">
+  <div class="card-body py-2 px-3 d-flex gap-2 flex-wrap align-items-center">
+    <span class="small fw-semibold me-1">Filter:</span>
+    <select id="platformFilter" class="form-select form-select-sm" style="width:auto;">
+      <option value="">All Platforms</option>
+      {% for p in platforms %}
+      <option value="{{ p }}">{{ p|capitalize }}</option>
+      {% endfor %}
+    </select>
+    <select id="statusFilter" class="form-select form-select-sm" style="width:auto;">
+      <option value="">All Status</option>
+      <option value="pending">Pending Review</option>
+      <option value="reviewed">Reviewed</option>
+    </select>
+    <select id="labelFilter" class="form-select form-select-sm" style="width:auto;">
+      <option value="">All Predictions</option>
+      <option value="Fake">Predicted Fake</option>
+      <option value="Legit">Predicted Legit</option>
+    </select>
+  </div>
+</div>
+
+<!-- Feedback table -->
+<div class="card rounded-4 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table id="feedbackTable" class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>ID</th>
+            <th>Platform</th>
+            <th>Predicted</th>
+            <th>Corrected</th>
+            <th>Confidence</th>
+            <th>Timestamp</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for entry in feedback_entries %}
+          <tr data-platform="{{ entry.platform }}"
+              data-status="{{ 'reviewed' if entry.is_reviewed else 'pending' }}"
+              data-label="{{ entry.predicted_label }}">
+            <td class="text-muted small">#{{ entry.id }}</td>
+            <td>
+              <span class="badge text-bg-secondary">{{ entry.platform|capitalize }}</span>
+            </td>
+            <td>
+              <span class="badge {% if entry.predicted_label == 'Fake' %}text-bg-danger{% else %}text-bg-success{% endif %}">
+                {{ entry.predicted_label }}
+              </span>
+            </td>
+            <td>
+              {% if entry.corrected_label %}
+              <span class="badge {% if entry.corrected_label == 'Fake' %}text-bg-danger{% else %}text-bg-success{% endif %}">
+                {{ entry.corrected_label }}
+              </span>
+              {% else %}
+              <span class="text-muted small">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if entry.confidence %}
+              <div class="progress" style="height:6px;width:60px;">
+                <div class="progress-bar {% if entry.confidence > 80 %}bg-danger{% elif entry.confidence > 60 %}bg-warning{% else %}bg-secondary{% endif %}"
+                     style="width:{{ entry.confidence }}%"></div>
+              </div>
+              <span class="small">{{ entry.confidence|round(1) }}%</span>
+              {% else %}—{% endif %}
+            </td>
+            <td class="small text-muted">
+              {{ entry.timestamp[:16]|replace('T',' ') if entry.timestamp else '—' }}
+            </td>
+            <td>
+              {% if entry.is_reviewed %}
+              <span class="badge text-bg-success">Reviewed</span>
+              {% else %}
+              <span class="badge text-bg-warning text-dark">Pending</span>
+              {% endif %}
+            </td>
+            <td>
+              <div class="d-flex gap-1">
+                <!-- View profile data -->
+                <button class="btn btn-sm btn-outline-secondary"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#profile_{{ entry.id }}"
+                        title="View profile data">
+                  <i class="bi bi-eye"></i>
+                </button>
+                <!-- Mark reviewed -->
+                {% if not entry.is_reviewed %}
+                <form method="POST" action="{{ url_for('feedback_mark_reviewed', entry_id=entry.id) }}"
+                      class="d-inline">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                  <button type="submit" class="btn btn-sm btn-outline-success" title="Mark reviewed">
+                    <i class="bi bi-check-lg"></i>
+                  </button>
+                </form>
+                {% endif %}
+              </div>
+              <!-- Collapsible profile data -->
+              <div class="collapse mt-2" id="profile_{{ entry.id }}">
+                <div class="card card-body p-2 small bg-light rounded-3 text-start" style="min-width:200px;max-width:300px;">
+                  {% for k, v in entry.profile_data.items() %}
+                  <div><strong>{{ k }}:</strong> {{ v }}</div>
+                  {% endfor %}
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Retrain section -->
+<div class="card rounded-4 shadow-sm mt-4">
+  <div class="card-header border-0 bg-transparent pt-3">
+    <h6 class="fw-bold mb-0">
+      <i class="bi bi-arrow-repeat me-2 text-primary"></i>Retrain with Corrected Feedback
+    </h6>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small">
+      Merge corrected feedback labels into the training data and retrain the model.
+      Only feedback entries with an explicit correction will be used.
+    </p>
+    <div class="row g-2">
+      {% for p in platforms %}
+      {% set count = feedback_stats.platforms_dict.get(p, 0) %}
+      {% if count > 0 %}
+      <div class="col-auto">
+        <form method="POST" action="{{ url_for('feedback_retrain', platform=p) }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-cpu me-1"></i>Retrain {{ p|capitalize }}
+            <span class="badge text-bg-secondary ms-1">{{ count }}</span>
+          </button>
+        </form>
+      </div>
+      {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+{% else %}
+<div class="card rounded-4 text-center py-5 border-dashed">
+  <div class="text-muted">
+    <i class="bi bi-hand-thumbs-up fs-1 d-block mb-3 opacity-25"></i>
+    <div class="fw-semibold">No feedback entries yet</div>
+    <div class="small">
+      Users can flag predictions using the "Flag as Incorrect" button on prediction results.
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  if (document.getElementById('feedbackTable')) {
+    new DataTable('#feedbackTable', {
+      pageLength: 25,
+      order: [[0, 'desc']],
+      dom: 'frtip',
+    });
+  }
+
+  // Client-side filters
+  function applyFilters() {
+    const platform = document.getElementById('platformFilter').value;
+    const status = document.getElementById('statusFilter').value;
+    const label = document.getElementById('labelFilter').value;
+    document.querySelectorAll('#feedbackTable tbody tr').forEach(row => {
+      const pMatch = !platform || row.dataset.platform === platform;
+      const sMatch = !status || row.dataset.status === status;
+      const lMatch = !label || row.dataset.label === label;
+      row.style.display = (pMatch && sMatch && lMatch) ? '' : 'none';
+    });
+  }
+
+  ['platformFilter','statusFilter','labelFilter'].forEach(id => {
+    document.getElementById(id)?.addEventListener('change', applyFilters);
+  });
+});
+</script>
+{% endblock %}

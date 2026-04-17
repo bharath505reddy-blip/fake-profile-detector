@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Real Dataset Loader — FakeProfileAI{% endblock %}
+{% block content %}
+
+<div class="d-flex align-items-center gap-2 mb-4">
+  <i class="bi bi-cloud-download fs-3 text-info"></i>
+  <div>
+    <h2 class="mb-0 fw-bold">Real Dataset Loader</h2>
+    <p class="text-muted mb-0">Load real labeled datasets to train more accurate models</p>
+  </div>
+</div>
+
+<!-- Local auto-discovered datasets -->
+{% if local_datasets %}
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-header bg-success bg-opacity-10 border-0 rounded-top-4">
+    <h5 class="mb-0"><i class="bi bi-folder-check me-2 text-success"></i>Auto-Discovered Local Datasets</h5>
+  </div>
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover mb-0">
+        <thead class="table-light">
+          <tr>
+            <th>File</th><th>Platform</th><th>Adapter</th><th>Label Col</th><th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for path, info in local_datasets.items() %}
+          <tr>
+            <td>
+              <code class="small">{{ info.filename }}</code>
+            </td>
+            <td>
+              <i class="bi {{ platform_icons.get(info.platform, 'bi-question') }} me-1"></i>
+              {{ info.platform | capitalize }}
+            </td>
+            <td><span class="badge bg-secondary">{{ info.adapter }}</span></td>
+            <td><code>{{ info.label_col }}</code></td>
+            <td>
+              <form method="POST" action="{{ url_for('load_real_dataset_route') }}" class="d-inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="platform" value="{{ info.platform }}">
+                <input type="hidden" name="path_or_url" value="{{ info.path }}">
+                <input type="hidden" name="adapter" value="{{ info.adapter }}">
+                <input type="hidden" name="do_train" value="1">
+                <button type="submit" class="btn btn-sm btn-success">
+                  <i class="bi bi-play-fill me-1"></i>Load & Train
+                </button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Custom URL / path loader -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-header bg-info bg-opacity-10 border-0 rounded-top-4">
+    <h5 class="mb-0"><i class="bi bi-link-45deg me-2 text-info"></i>Load from URL or File Path</h5>
+  </div>
+  <div class="card-body">
+    <form method="POST" action="{{ url_for('load_real_dataset_route') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Platform</label>
+          <select name="platform" class="form-select" required>
+            {% for p in platforms %}
+            <option value="{{ p }}">{{ p | capitalize }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="col-md-4">
+          <label class="form-label fw-semibold">Format Adapter</label>
+          <select name="adapter" class="form-select">
+            <option value="generic">Auto-detect (generic)</option>
+            <option value="instagram_kaggle">Instagram Kaggle Format</option>
+            <option value="twibot20">TwiBot-20 (Twitter)</option>
+            <option value="cresci17">Cresci-2017 (Twitter)</option>
+          </select>
+        </div>
+        <div class="col-md-4 d-flex align-items-end">
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" name="do_train" id="doTrainCheck" value="1" checked>
+            <label class="form-check-label fw-semibold" for="doTrainCheck">Auto-train after loading</label>
+          </div>
+        </div>
+        <div class="col-12">
+          <label class="form-label fw-semibold">Dataset URL or Local File Path</label>
+          <input type="text" name="path_or_url" class="form-control font-monospace"
+                 placeholder="https://... or /absolute/path/to/dataset.csv" required>
+          <div class="form-text">
+            Accepts: HTTP/HTTPS URLs (CSV or ZIP), absolute local file paths.
+            The file must have a label column (e.g. <code>label</code>, <code>fake</code>, <code>is_bot</code>).
+          </div>
+        </div>
+        <div class="col-12">
+          <button type="submit" class="btn btn-info">
+            <i class="bi bi-cloud-download me-2"></i>Load Dataset
+          </button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Known public datasets -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-header bg-primary bg-opacity-10 border-0 rounded-top-4">
+    <h5 class="mb-0"><i class="bi bi-database me-2 text-primary"></i>Known Public Datasets</h5>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      These are well-known academic or community datasets. Some require manual download first.
+    </p>
+    <div class="row g-3">
+      {% for key, ds in known_datasets.items() %}
+      <div class="col-md-6">
+        <div class="card border rounded-3 h-100">
+          <div class="card-body">
+            <div class="d-flex align-items-start gap-2 mb-2">
+              <i class="bi {{ platform_icons.get(ds.platform, 'bi-question') }} text-primary fs-4"></i>
+              <div>
+                <h6 class="mb-0 fw-bold">{{ ds.name }}</h6>
+                <span class="badge bg-secondary small">{{ ds.platform }}</span>
+                <span class="badge bg-info small">{{ ds.adapter }}</span>
+              </div>
+            </div>
+            <p class="text-muted small mb-2">{{ ds.description }}</p>
+            {% if ds.url %}
+            <form method="POST" action="{{ url_for('load_real_dataset_route') }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="platform" value="{{ ds.platform }}">
+              <input type="hidden" name="path_or_url" value="{{ ds.url }}">
+              <input type="hidden" name="adapter" value="{{ ds.adapter }}">
+              <input type="hidden" name="do_train" value="1">
+              <button type="submit" class="btn btn-sm btn-primary">
+                <i class="bi bi-download me-1"></i>Download & Train
+              </button>
+            </form>
+            {% elif ds.local_path %}
+            <form method="POST" action="{{ url_for('load_real_dataset_route') }}" class="d-inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="platform" value="{{ ds.platform }}">
+              <input type="hidden" name="path_or_url" value="{{ ds.local_path }}">
+              <input type="hidden" name="adapter" value="{{ ds.adapter }}">
+              <input type="hidden" name="do_train" value="1">
+              <button type="submit" class="btn btn-sm btn-success">
+                <i class="bi bi-play-fill me-1"></i>Load Local & Train
+              </button>
+            </form>
+            {% else %}
+            <div class="d-block mt-1">
+              <span class="badge bg-warning text-dark mb-1">
+                <i class="bi bi-exclamation-triangle me-1"></i>Manual download needed
+              </span>
+              {% if ds.download_instructions %}
+              <div class="small text-muted mt-1" style="font-size:0.78rem">
+                <i class="bi bi-info-circle me-1"></i>{{ ds.download_instructions }}
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Live scraper info -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-header bg-warning bg-opacity-10 border-0 rounded-top-4">
+    <h5 class="mb-0"><i class="bi bi-wifi me-2 text-warning"></i>Live Public Profile Scrapers</h5>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">
+      Fetch real public profile data without API keys to build live training datasets.
+      Install with <code>pip install -r requirements.txt</code>.
+    </p>
+    <div class="row g-3 small">
+      <div class="col-md-6">
+        <div class="border rounded-3 p-3">
+          <div class="fw-semibold mb-1"><i class="bi bi-instagram text-danger me-1"></i>Instagram — <code>instaloader</code></div>
+          <div class="text-muted mb-2">Public profiles, no authentication needed</div>
+          <pre class="bg-body-secondary rounded p-2 mb-0" style="font-size:0.75rem">import instaloader
+L = instaloader.Instaloader()
+p = instaloader.Profile.from_username(L.context, "cristiano")
+print(p.followers, p.is_verified)</pre>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded-3 p-3">
+          <div class="fw-semibold mb-1"><i class="bi bi-twitter-x me-1"></i>X/Twitter — <code>ntscraper</code></div>
+          <div class="text-muted mb-2">Via Nitter — zero authentication</div>
+          <pre class="bg-body-secondary rounded p-2 mb-0" style="font-size:0.75rem">from ntscraper import Nitter
+s = Nitter()
+u = s.get_profile_info("elonmusk")
+print(u['followers'])</pre>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded-3 p-3">
+          <div class="fw-semibold mb-1"><i class="bi bi-reddit text-warning me-1"></i>Reddit — <code>praw</code></div>
+          <div class="text-muted mb-2">Free API — register app at reddit.com/prefs/apps</div>
+          <pre class="bg-body-secondary rounded p-2 mb-0" style="font-size:0.75rem">import praw
+r = praw.Reddit(client_id="...", client_secret="...", user_agent="...")
+u = r.redditor("spez")
+print(u.comment_karma, u.created_utc)</pre>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="border rounded-3 p-3">
+          <div class="fw-semibold mb-1"><i class="bi bi-github me-1"></i>GitHub — <code>PyGithub</code></div>
+          <div class="text-muted mb-2">Unauthenticated: 60 req/hr. Token: 5000/hr</div>
+          <pre class="bg-body-secondary rounded p-2 mb-0" style="font-size:0.75rem">from github import Github
+g = Github()  # or Github("token")
+u = g.get_user("torvalds")
+print(u.followers, u.public_repos)</pre>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- API usage card -->
+<div class="card border-0 shadow-sm rounded-4 mb-4">
+  <div class="card-header bg-dark bg-opacity-10 border-0 rounded-top-4">
+    <h5 class="mb-0"><i class="bi bi-code-slash me-2"></i>REST API — Programmatic Access</h5>
+  </div>
+  <div class="card-body">
+    <p class="text-muted small mb-3">Integrate fake profile detection into your apps via JSON API.</p>
+    <div class="row g-3">
+      <div class="col-md-6">
+        <h6 class="fw-semibold">Single Profile Prediction</h6>
+        <pre class="bg-body-secondary rounded p-3 small"><code>POST /api/v1/predict/instagram
+Content-Type: application/json
+
+{
+  "username": "cristiano",
+  "followers": 650000000,
+  "following": 500,
+  "posts": 3800,
+  "bio": "Official account",
+  "is_verified": 1
+}
+
+→ { "prediction": "Legit", "confidence": 97.2, "is_fake": false }</code></pre>
+      </div>
+      <div class="col-md-6">
+        <h6 class="fw-semibold">Batch Prediction</h6>
+        <pre class="bg-body-secondary rounded p-3 small"><code>POST /api/v1/predict/x
+Content-Type: application/json
+
+{
+  "profiles": [
+    { "username": "elonmusk", "followers": 200000000, "is_verified": 1 },
+    { "username": "bot_9283", "followers": 5, "following": 4999 }
+  ]
+}
+
+→ { "count": 2, "summary": { "Legit": 1, "Fake": 1 }, ... }</code></pre>
+      </div>
+      <div class="col-12">
+        <a href="/api/v1/status" target="_blank" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-activity me-1"></i>API Status (JSON)
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

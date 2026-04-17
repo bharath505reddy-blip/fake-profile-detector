@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - FLASK_DEBUG=${FLASK_DEBUG:-0}
+      - REQUIRE_AUTH=${REQUIRE_AUTH:-0}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+    volumes:
+      # Persist models, uploads, and database across container restarts
+      - ./models:/app/models
+      - ./uploads:/app/uploads
+      - ./static/charts:/app/static/charts
+      - ./instance:/app/instance
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

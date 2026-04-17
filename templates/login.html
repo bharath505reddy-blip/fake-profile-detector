@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Login — FakeProfileAI{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5 col-lg-4">
+    <div class="card shadow-sm rounded-4 mt-4">
+      <div class="card-body p-4">
+        <div class="text-center mb-4">
+          <i class="bi bi-shield-shaded fs-1 text-primary d-block mb-2"></i>
+          <h1 class="h5 mb-0">Sign in to FakeProfileAI</h1>
+        </div>
+        <form method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Username</label>
+            <input type="text" class="form-control" name="username" autofocus required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Password</label>
+            <input type="password" class="form-control" name="password" required>
+          </div>
+          <button class="btn btn-primary w-100">
+            <i class="bi bi-box-arrow-in-right me-2"></i>Login
+          </button>
+        </form>
+        <hr>
+        <div class="text-center small text-muted">
+          No account yet?
+          <a href="{{ url_for('register') }}">Create one</a>
+          (first user becomes admin)
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

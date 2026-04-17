@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}Training History{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-11">
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h1 class="h4 mb-1"><i class="bi bi-clock-history me-2"></i>Training History</h1>
+            <p class="text-muted small mb-0">Cross-validation metrics from every training run.</p>
+          </div>
+          <div class="d-flex gap-2">
+            <a class="btn btn-sm btn-outline-primary" href="{{ url_for('comparison') }}">
+              <i class="bi bi-bar-chart-line me-1"></i>Full Comparison
+            </a>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+          </div>
+        </div>
+
+        {% set ns = namespace(any_history=false) %}
+        {% for p in platforms %}
+          {% if history.get(p) %}{% set ns.any_history = true %}{% endif %}
+        {% endfor %}
+
+        {% if not ns.any_history %}
+          <div class="text-center py-5 text-muted">
+            <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+            No training history yet. Train a model to see metrics here.
+          </div>
+        {% else %}
+          <!-- Summary cards -->
+          <div class="row g-3 mb-4">
+            {% for p in platforms %}
+            {% set entries = history.get(p, []) %}
+            {% if entries %}
+            {% set last = entries[-1] %}
+            <div class="col-6 col-md-3 col-lg-2">
+              <div class="card border-0 rounded-3 text-center p-2
+                {% if last.accuracy and last.accuracy >= 0.9 %}bg-success bg-opacity-10
+                {% elif last.accuracy and last.accuracy >= 0.75 %}bg-warning bg-opacity-10
+                {% else %}bg-secondary bg-opacity-10{% endif %}">
+                <div class="small fw-semibold text-capitalize mb-1">{{ p }}</div>
+                {% if last.accuracy %}
+                <div class="fs-5 fw-bold
+                  {% if last.accuracy >= 0.9 %}text-success
+                  {% elif last.accuracy >= 0.75 %}text-warning
+                  {% else %}text-danger{% endif %}">
+                  {{ "%.0f"|format(last.accuracy * 100) }}%
+                </div>
+                <div class="small text-muted">Accuracy</div>
+                {% else %}
+                <div class="text-muted small">—</div>
+                {% endif %}
+              </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+
+          <!-- Per-platform tables -->
+          {% for p in platforms %}
+            {% set entries = history.get(p, []) %}
+            {% if entries %}
+            <div class="mb-4">
+              <div class="d-flex justify-content-between align-items-center mb-2">
+                <h2 class="h6 text-capitalize mb-0">
+                  <i class="bi bi-cpu me-1 text-primary"></i>{{ p }}
+                  <span class="badge text-bg-secondary ms-1">{{ entries|length }} runs</span>
+                </h2>
+                <a href="{{ url_for('train_platform', platform=p) }}" class="btn btn-xs btn-outline-primary btn-sm">
+                  <i class="bi bi-plus me-1"></i>Retrain
+                </a>
+              </div>
+              <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle rounded-3 overflow-hidden">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Trained At (UTC)</th>
+                      <th>Rows</th>
+                      <th>Accuracy</th>
+                      <th>Precision</th>
+                      <th>Recall</th>
+                      <th>F1</th>
+                      <th>CV Folds</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {% for e in entries | reverse %}
+                    <tr>
+                      <td class="text-nowrap small text-muted">{{ e.timestamp }}</td>
+                      <td>{{ e.rows }}</td>
+                      <td>
+                        {% if e.accuracy is defined %}
+                          <div class="d-flex align-items-center gap-2">
+                            <div class="progress flex-grow-1" style="height:5px; min-width:40px;">
+                              <div class="progress-bar
+                                {% if e.accuracy >= 0.9 %}bg-success{% elif e.accuracy >= 0.75 %}bg-warning{% else %}bg-danger{% endif %}"
+                                style="width:{{ (e.accuracy*100)|round }}%"></div>
+                            </div>
+                            <span class="badge {% if e.accuracy >= 0.9 %}text-bg-success{% elif e.accuracy >= 0.75 %}text-bg-warning{% else %}text-bg-danger{% endif %}">
+                              {{ "%.1f"|format(e.accuracy * 100) }}%
+                            </span>
+                          </div>
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>{{ "%.3f"|format(e.precision) if e.precision is defined else "—" }}</td>
+                      <td>{{ "%.3f"|format(e.recall) if e.recall is defined else "—" }}</td>
+                      <td>
+                        {% if e.f1 is defined %}
+                          <strong>{{ "%.3f"|format(e.f1) }}</strong>
+                        {% else %}—{% endif %}
+                      </td>
+                      <td>{{ e.cv_folds if e.cv_folds is defined else "—" }}</td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            {% endif %}
+          {% endfor %}
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

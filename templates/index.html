@@ -1,0 +1,215 @@
+{% extends "base.html" %}
+{% block title %}FakeProfileAI — Home{% endblock %}
+{% block content %}
+
+<!-- Hero section -->
+<div class="row mb-4">
+  <div class="col-12">
+    <div class="card border-0 rounded-4 text-white" style="background: linear-gradient(135deg, #0d6efd 0%, #6610f2 100%);">
+      <div class="card-body p-4 p-md-5">
+        <div class="row align-items-center">
+          <div class="col-md-8">
+            <h1 class="fw-bold mb-2">
+              <i class="bi bi-shield-shaded me-2"></i>Fake Profile Detector
+            </h1>
+            <p class="mb-3 opacity-75 fs-5">
+              ML-powered detection across <strong>10 social platforms</strong>
+              using an ensemble of Random Forest, XGBoost, and SVM.
+            </p>
+            <div class="d-flex flex-wrap gap-2">
+              <span class="badge bg-white text-dark fs-6 px-3 py-2">
+                <i class="bi bi-cpu me-1 text-primary"></i>
+                {{ "RF+XGB+SVM" if xgboost_available else "RF+SVM" }} Ensemble
+              </span>
+              {% if shap_available %}
+              <span class="badge bg-white text-dark fs-6 px-3 py-2">
+                <i class="bi bi-lightbulb me-1 text-warning"></i>SHAP Explainability
+              </span>
+              {% endif %}
+              <span class="badge bg-white text-dark fs-6 px-3 py-2">
+                <i class="bi bi-diagram-3 me-1 text-success"></i>Anomaly Detection
+              </span>
+            </div>
+          </div>
+          <div class="col-md-4 text-end d-none d-md-block">
+            <i class="bi bi-shield-shaded" style="font-size: 8rem; opacity: 0.2;"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick stats bar -->
+{% set trained_count = model_status.values() | selectattr('exists') | list | length %}
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card border-0 bg-primary bg-opacity-10 rounded-4 text-center p-3">
+      <div class="fs-2 fw-bold text-primary">{{ trained_count }}</div>
+      <div class="small text-muted">Models Trained</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 bg-success bg-opacity-10 rounded-4 text-center p-3">
+      <div class="fs-2 fw-bold text-success">10</div>
+      <div class="small text-muted">Platforms</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 bg-warning bg-opacity-10 rounded-4 text-center p-3">
+      <div class="fs-2 fw-bold text-warning">3</div>
+      <div class="small text-muted">ML Models</div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <div class="card border-0 bg-info bg-opacity-10 rounded-4 text-center p-3">
+      <div class="fs-2 fw-bold text-info">REST</div>
+      <div class="small text-muted">API Ready</div>
+    </div>
+  </div>
+</div>
+
+<!-- Platform cards -->
+<div class="card shadow-sm rounded-4 mb-4">
+  <div class="card-body p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <div>
+        <h2 class="h5 mb-1">Select a Platform</h2>
+        <p class="text-muted small mb-0">
+          <span class="badge text-bg-success">Ready</span> = model trained &nbsp;
+          <span class="badge text-bg-secondary">Untrained</span> = needs training
+        </p>
+      </div>
+      <a href="{{ url_for('comparison') }}" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-bar-chart-line me-1"></i>Compare All
+      </a>
+    </div>
+
+    <div class="row g-3">
+      {% for p in platforms %}
+      {% set status = model_status[p] %}
+      {% set acc = platform_acc.get(p) %}
+      <div class="col-6 col-md-4 col-lg-3 col-xl-2">
+        <div class="border rounded-4 p-3 h-100 platform-card {% if status.exists %}trained{% endif %} position-relative">
+          <!-- Platform header -->
+          <div class="d-flex justify-content-between align-items-start mb-2">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi {{ platform_icons.get(p, 'bi-person') }} fs-5
+                {% if p == 'instagram' %}text-danger
+                {% elif p == 'facebook' %}text-primary
+                {% elif p == 'x' %}text-dark
+                {% elif p == 'linkedin' %}text-primary
+                {% elif p == 'github' %}text-dark
+                {% elif p == 'discord' %}text-indigo
+                {% elif p == 'youtube' %}text-danger
+                {% elif p == 'tiktok' %}text-dark
+                {% elif p == 'reddit' %}text-danger
+                {% elif p == 'snapchat' %}text-warning
+                {% endif %}"></i>
+              <span class="fw-semibold text-capitalize small">{{ p }}</span>
+            </div>
+            {% if status.exists %}
+              <span class="badge text-bg-success">Ready</span>
+            {% else %}
+              <span class="badge text-bg-secondary">Untrained</span>
+            {% endif %}
+          </div>
+
+          {% if acc is not none %}
+          <div class="mb-2">
+            <div class="d-flex justify-content-between small text-muted mb-1">
+              <span>Accuracy</span><span class="fw-semibold {% if acc >= 0.9 %}text-success{% elif acc >= 0.75 %}text-warning{% else %}text-danger{% endif %}">{{ "%.0f"|format(acc * 100) }}%</span>
+            </div>
+            <div class="progress" style="height:4px">
+              <div class="progress-bar {% if acc >= 0.9 %}bg-success{% elif acc >= 0.75 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ (acc * 100)|round }}%"></div>
+            </div>
+          </div>
+          {% elif status.exists %}
+            <div class="small text-muted mb-2">Trained {{ status.trained_at }}</div>
+          {% else %}
+            <div class="small text-muted mb-2">No model yet</div>
+          {% endif %}
+
+          <div class="d-flex flex-column gap-1 mt-auto">
+            <a class="btn btn-sm btn-primary" href="{{ url_for('upload', platform=p) }}">
+              <i class="bi bi-upload me-1"></i>Analyze CSV
+            </a>
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('manual_predict', platform=p) }}">
+              <i class="bi bi-person-search me-1"></i>Single profile
+            </a>
+            {% if p in live_lookup_platforms %}
+            <a class="btn btn-sm btn-outline-info" href="{{ url_for('manual_predict', platform=p) }}">
+              <i class="bi bi-wifi me-1"></i>Live lookup
+            </a>
+            {% endif %}
+            <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('train_platform', platform=p) }}">
+              <i class="bi bi-cpu me-1"></i>Train model
+            </a>
+          </div>
+
+          <!-- Extra tools row -->
+          <div class="d-flex gap-1 mt-1 flex-wrap">
+            <a class="btn btn-xs btn-link text-muted text-decoration-none p-0 small"
+               href="{{ url_for('dataset_stats', platform=p) }}"
+               data-bs-toggle="tooltip" title="Dataset Statistics">
+              <i class="bi bi-graph-up"></i>
+            </a>
+            <a class="btn btn-xs btn-link text-muted text-decoration-none p-0 small"
+               href="{{ url_for('anomaly_detection', platform=p) }}"
+               data-bs-toggle="tooltip" title="Anomaly Detection">
+              <i class="bi bi-exclamation-triangle"></i>
+            </a>
+            <a class="btn btn-xs btn-link text-muted text-decoration-none p-0 small"
+               href="{{ url_for('abtest', platform=p) }}"
+               data-bs-toggle="tooltip" title="A/B Model Test">
+              <i class="bi bi-a-b"></i>
+            </a>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Feature highlights -->
+<div class="row g-3">
+  <div class="col-md-4">
+    <div class="card rounded-4 border-0 bg-primary bg-opacity-10 h-100">
+      <div class="card-body p-4">
+        <i class="bi bi-cpu fs-2 text-primary mb-2 d-block"></i>
+        <h5>Ensemble ML</h5>
+        <p class="text-muted small mb-0">
+          RF + XGBoost + SVM voting classifier for higher accuracy and robustness than any single model.
+          Calibrated probabilities via Platt scaling.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card rounded-4 border-0 bg-warning bg-opacity-10 h-100">
+      <div class="card-body p-4">
+        <i class="bi bi-lightbulb fs-2 text-warning mb-2 d-block"></i>
+        <h5>SHAP Explainability</h5>
+        <p class="text-muted small mb-0">
+          Every prediction explained by SHAP values — understand exactly which features drove the model's decision.
+          No black box.
+        </p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="card rounded-4 border-0 bg-success bg-opacity-10 h-100">
+      <div class="card-body p-4">
+        <i class="bi bi-wifi fs-2 text-success mb-2 d-block"></i>
+        <h5>Live API Lookup</h5>
+        <p class="text-muted small mb-0">
+          Fetch GitHub and Reddit profiles in real time — auto-fill form data from live public APIs.
+          No manual data entry needed.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

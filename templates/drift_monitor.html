@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% block title %}Drift Monitor — FakeProfileAI{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h4 mb-1">
+      <i class="bi bi-activity me-2 text-warning"></i>Model Drift Monitor
+      <span class="badge text-bg-warning ms-2 small fw-normal" data-bs-toggle="tooltip"
+            title="Population Stability Index measures distribution shift between training and live data">
+        PSI-based
+      </span>
+    </h1>
+    <p class="text-muted small mb-0">Monitor feature distribution drift and model confidence trends</p>
+  </div>
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back
+  </a>
+</div>
+
+<!-- Alert banners for platforms needing retraining -->
+{% set alert_platforms = drift_summaries | selectattr('drift_level', 'equalto', 'alert') | list %}
+{% if alert_platforms %}
+<div class="alert alert-danger d-flex align-items-center gap-2 rounded-4 mb-4" role="alert">
+  <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+  <div>
+    <strong>Retraining Recommended:</strong>
+    {% for s in alert_platforms %}
+      <span class="badge text-bg-danger">{{ s.platform|capitalize }}</span>
+    {% endfor %}
+    — Significant feature drift detected (PSI &gt; 0.2). Model accuracy may be degraded.
+  </div>
+</div>
+{% endif %}
+
+<!-- PSI Legend -->
+<div class="d-flex gap-3 mb-4 small">
+  <span><span class="badge text-bg-success">OK</span> PSI &lt; 0.1 — no significant change</span>
+  <span><span class="badge text-bg-warning text-dark">WARN</span> PSI 0.1–0.2 — monitor closely</span>
+  <span><span class="badge text-bg-danger">ALERT</span> PSI &gt; 0.2 — retrain recommended</span>
+</div>
+
+<!-- Platform drift cards -->
+{% if drift_summaries %}
+<div class="row g-3 mb-4">
+  {% for summary in drift_summaries %}
+  <div class="col-md-6 col-xl-4">
+    <div class="card rounded-4 shadow-sm h-100
+      {% if summary.drift_level == 'alert' %}border-danger{% elif summary.drift_level == 'warn' %}border-warning{% else %}border-success{% endif %}
+      border-2">
+      <div class="card-body">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <h6 class="mb-0 fw-bold">
+            <i class="bi bi-{{ {'instagram':'instagram','facebook':'facebook','x':'twitter-x','linkedin':'linkedin','github':'github','discord':'discord','youtube':'youtube','tiktok':'tiktok','reddit':'reddit','snapchat':'camera-fill'}.get(summary.platform, 'globe') }} me-2"></i>
+            {{ summary.platform|capitalize }}
+          </h6>
+          <span class="badge
+            {% if summary.drift_level == 'alert' %}text-bg-danger
+            {% elif summary.drift_level == 'warn' %}text-bg-warning text-dark
+            {% else %}text-bg-success{% endif %}">
+            {{ summary.drift_level|upper }}
+          </span>
+        </div>
+
+        <div class="row g-2 text-center small mb-2">
+          <div class="col-6">
+            <div class="fw-bold
+              {% if summary.max_psi >= 0.2 %}text-danger{% elif summary.max_psi >= 0.1 %}text-warning{% else %}text-success{% endif %}">
+              {{ "%.4f"|format(summary.max_psi) }}
+            </div>
+            <div class="text-muted">Max PSI</div>
+          </div>
+          <div class="col-6">
+            <div class="fw-bold">{{ summary.drifted_features|length }}</div>
+            <div class="text-muted">Drifted Features</div>
+          </div>
+        </div>
+
+        {% if summary.confidence_trend %}
+        <div class="small text-muted mb-2">
+          Confidence trend:
+          {% for conf in summary.confidence_trend[-5:] %}
+            <span class="badge text-bg-secondary">{{ "%.0f"|format(conf) }}%</span>
+          {% endfor %}
+        </div>
+        {% endif %}
+
+        {% if summary.latest_check %}
+        <div class="small text-muted">
+          <i class="bi bi-clock me-1"></i>Last check: {{ summary.latest_check[:16]|replace('T',' ') }}
+        </div>
+        {% endif %}
+
+        {% if summary.retrain_recommended %}
+        <div class="mt-2">
+          <span class="badge text-bg-danger w-100 py-1">
+            <i class="bi bi-arrow-repeat me-1"></i>Retrain Recommended
+          </span>
+        </div>
+        {% endif %}
+
+        <!-- Run drift check form -->
+        <form method="POST" action="{{ url_for('drift_monitor_platform', platform=summary.platform) }}"
+              class="mt-2">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <button type="submit" class="btn btn-sm btn-outline-secondary w-100">
+            <i class="bi bi-arrow-clockwise me-1"></i>Run Drift Check
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card rounded-4 text-center py-5 border-dashed">
+  <div class="text-muted">
+    <i class="bi bi-activity fs-1 d-block mb-3 opacity-25"></i>
+    <div class="fw-semibold">No drift data yet</div>
+    <div class="small">Drift is computed automatically after every {{ check_interval|default(100) }} predictions,
+      or you can trigger it manually per platform above.</div>
+  </div>
+</div>
+{% endif %}
+
+<!-- Detailed PSI breakdown for selected platform -->
+{% if selected_platform and feature_psi %}
+<div class="card rounded-4 shadow-sm mt-2">
+  <div class="card-header border-0 bg-transparent pt-3">
+    <h6 class="fw-bold mb-0">
+      <i class="bi bi-bar-chart-horizontal me-2 text-primary"></i>
+      Feature PSI — {{ selected_platform|capitalize }}
+    </h6>
+    <div class="small text-muted">Higher bars indicate greater distribution shift from training data</div>
+  </div>
+  <div class="card-body">
+    {% for feature, psi in (feature_psi|dictsort(by='value', reverse=true))[:20] %}
+    <div class="mb-2">
+      <div class="d-flex justify-content-between small mb-1">
+        <span class="text-truncate me-2" style="max-width:200px;" title="{{ feature }}">{{ feature }}</span>
+        <span class="fw-semibold
+          {% if psi >= 0.2 %}text-danger{% elif psi >= 0.1 %}text-warning{% else %}text-success{% endif %}">
+          {{ "%.4f"|format(psi) }}
+        </span>
+      </div>
+      <div class="progress" style="height: 8px;">
+        <div class="progress-bar
+          {% if psi >= 0.2 %}bg-danger{% elif psi >= 0.1 %}bg-warning{% else %}bg-success{% endif %}"
+          style="width: {{ [psi / 0.3 * 100, 100]|min }}%"></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}

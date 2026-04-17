@@ -1,0 +1,14 @@
+.platform-tile .hover-card {
+  transition: transform .12s ease, box-shadow .12s ease;
+}
+.platform-tile:hover .hover-card {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0,0,0,.08);
+}
+.metric-box {
+  border: 1px solid rgba(0,0,0,.08);
+  background: rgba(0,0,0,.02);
+}
+.rounded-4 {
+  border-radius: 1rem !important;
+}

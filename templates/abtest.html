@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}A/B Model Testing — {{ platform|capitalize }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 class="h4 mb-1">
+          <i class="bi bi-a-b me-2"></i>A/B Model Testing — {{ platform|capitalize }}
+        </h1>
+        <p class="text-muted small">Compare predictions from two different models on the same dataset.</p>
+      </div>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+    </div>
+
+    <div class="row g-4">
+      <!-- Upload form -->
+      <div class="col-md-5">
+        <div class="card shadow-sm rounded-4">
+          <div class="card-body p-4">
+            <h2 class="h6 mb-3">Upload Models & Data</h2>
+            <form method="POST" enctype="multipart/form-data">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Model A <span class="badge text-bg-primary ms-1">Model A</span>
+                </label>
+                {% if model_exists %}
+                <div class="alert alert-success rounded-3 small py-2 mb-2">
+                  <i class="bi bi-check-circle me-1"></i>
+                  Using saved <strong>{{ platform|capitalize }}</strong> model (default)
+                </div>
+                {% endif %}
+                <input type="file" class="form-control form-control-sm" name="model_a" accept=".pkl">
+                <div class="form-text">Leave empty to use the saved {{ platform|capitalize }} model.</div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">
+                  Model B <span class="badge text-bg-secondary ms-1">Model B</span>
+                </label>
+                <input type="file" class="form-control form-control-sm" name="model_b" accept=".pkl">
+                <div class="form-text">Upload a different .pkl model file to compare against.</div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label fw-semibold">Test Dataset (CSV) <span class="text-danger">*</span></label>
+                <input type="file" class="form-control" name="data" accept=".csv" required>
+                <div class="form-text">Upload profiles to run through both models.</div>
+              </div>
+
+              <button class="btn btn-primary w-100">
+                <i class="bi bi-play me-2"></i>Run A/B Test
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div class="col-md-7">
+        {% if ab_results %}
+        <!-- Agreement stats -->
+        <div class="row g-3 mb-3">
+          <div class="col-4">
+            <div class="card text-center border-0 bg-primary bg-opacity-10 rounded-4 p-3">
+              <div class="fs-3 fw-bold text-primary">{{ ab_results.counts_a.get('Fake', 0) }}</div>
+              <div class="small text-muted">Model A — Fake</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="card text-center border-0 bg-secondary bg-opacity-10 rounded-4 p-3">
+              {% if ab_results.counts_b %}
+              <div class="fs-3 fw-bold text-secondary">{{ ab_results.counts_b.get('Fake', 0) }}</div>
+              {% else %}
+              <div class="fs-3 fw-bold text-muted">—</div>
+              {% endif %}
+              <div class="small text-muted">Model B — Fake</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="card text-center border-0 rounded-4 p-3
+              {% if ab_results.agreement and ab_results.agreement >= 90 %}bg-success bg-opacity-10
+              {% elif ab_results.agreement and ab_results.agreement >= 75 %}bg-warning bg-opacity-10
+              {% else %}bg-danger bg-opacity-10{% endif %}">
+              <div class="fs-3 fw-bold
+                {% if ab_results.agreement and ab_results.agreement >= 90 %}text-success
+                {% elif ab_results.agreement and ab_results.agreement >= 75 %}text-warning
+                {% else %}text-danger{% endif %}">
+                {{ ab_results.agreement or "—" }}{% if ab_results.agreement %}%{% endif %}
+              </div>
+              <div class="small text-muted">Agreement Rate</div>
+            </div>
+          </div>
+        </div>
+
+        {% if ab_results.agreement %}
+        <div class="alert rounded-4 mb-3
+          {% if ab_results.agreement >= 90 %}alert-success{% elif ab_results.agreement >= 75 %}alert-warning{% else %}alert-danger{% endif %}">
+          <i class="bi bi-info-circle me-2"></i>
+          Models agree on <strong>{{ ab_results.agreement }}%</strong> of predictions.
+          {% if ab_results.agreement < 75 %}
+          Large disagreement may indicate significantly different decision boundaries.
+          {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Comparison table -->
+        <div class="card shadow-sm rounded-4">
+          <div class="card-body p-3">
+            <h3 class="h6 mb-3">Prediction Comparison (first 200 rows)</h3>
+            <div class="table-responsive">
+              <table id="abTable" class="table table-sm table-hover" style="width:100%">
+                <thead class="table-light">
+                  <tr>
+                    <th>Profile</th>
+                    <th>Model A</th>
+                    <th>Conf A</th>
+                    {% if ab_results.rows and ab_results.rows[0].get('pred_b') is defined %}
+                    <th>Model B</th>
+                    <th>Conf B</th>
+                    <th>Match?</th>
+                    {% endif %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in ab_results.rows %}
+                  <tr {% if row.get('agree') == false %}class="table-warning"{% endif %}>
+                    <td class="small">{{ row.profile }}</td>
+                    <td>
+                      {% if row.pred_a == "Fake" %}
+                        <span class="badge text-bg-danger">Fake</span>
+                      {% else %}
+                        <span class="badge text-bg-success">Legit</span>
+                      {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ row.conf_a or "—" }}{% if row.conf_a %}%{% endif %}</td>
+                    {% if row.get('pred_b') %}
+                    <td>
+                      {% if row.pred_b == "Fake" %}
+                        <span class="badge text-bg-danger">Fake</span>
+                      {% else %}
+                        <span class="badge text-bg-success">Legit</span>
+                      {% endif %}
+                    </td>
+                    <td class="small text-muted">{{ row.conf_b or "—" }}{% if row.conf_b %}%{% endif %}</td>
+                    <td>
+                      {% if row.get('agree') %}
+                        <i class="bi bi-check-circle text-success"></i>
+                      {% else %}
+                        <i class="bi bi-x-circle text-danger"></i>
+                      {% endif %}
+                    </td>
+                    {% endif %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="card rounded-4 text-center p-5 text-muted h-100">
+          <div>
+            <i class="bi bi-a-b fs-1 d-block mb-3 opacity-25"></i>
+            <p>Upload models and test data to see the comparison here.</p>
+            <p class="small">
+              Model B is optional — leave it empty to just inspect Model A's predictions.
+            </p>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% if ab_results %}
+<script>
+  $('#abTable').DataTable({
+    pageLength: 25,
+    order: [],
+    language: { search: "Filter:" },
+  });
+</script>
+{% endif %}
+{% endblock %}

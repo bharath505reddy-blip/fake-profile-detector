@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Dataset Statistics — {{ platform|capitalize }}{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <div>
+        <h1 class="h4 mb-1">
+          <i class="bi bi-graph-up me-2"></i>Dataset Statistics — {{ platform|capitalize }}
+        </h1>
+        <p class="text-muted small">Analyze your dataset before training — check class balance, feature distributions, and correlations.</p>
+      </div>
+      <div class="d-flex gap-2">
+        <a href="{{ url_for('train_platform', platform=platform) }}" class="btn btn-sm btn-primary">
+          <i class="bi bi-cpu me-1"></i>Train Model
+        </a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+      </div>
+    </div>
+
+    <!-- Upload form -->
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3">Upload your labeled CSV for analysis</h2>
+        <form method="POST" enctype="multipart/form-data" class="row g-3 align-items-end">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div class="col-md-8">
+            <input class="form-control" type="file" name="file" accept=".csv" required>
+            <div class="form-text">CSV with a <code>label</code> column (0=Legit, 1=Fake).</div>
+          </div>
+          <div class="col-md-4">
+            <button class="btn btn-primary w-100">
+              <i class="bi bi-graph-up me-2"></i>Analyze Dataset
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {% if stats %}
+    <!-- Summary metrics -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card border-0 bg-primary bg-opacity-10 rounded-4 text-center p-3">
+          <div class="fs-2 fw-bold text-primary">{{ stats.rows }}</div>
+          <div class="small text-muted">Total Rows</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 bg-success bg-opacity-10 rounded-4 text-center p-3">
+          <div class="fs-2 fw-bold text-success">{{ stats.features }}</div>
+          <div class="small text-muted">Features</div>
+        </div>
+      </div>
+      {% if stats.class_counts %}
+      <div class="col-6 col-md-3">
+        <div class="card border-0 bg-danger bg-opacity-10 rounded-4 text-center p-3">
+          <div class="fs-2 fw-bold text-danger">{{ stats.class_counts.get(1, 0) }}</div>
+          <div class="small text-muted">Fake Profiles</div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card border-0 bg-success bg-opacity-10 rounded-4 text-center p-3">
+          <div class="fs-2 fw-bold text-success">{{ stats.class_counts.get(0, 0) }}</div>
+          <div class="small text-muted">Legit Profiles</div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Class balance warning -->
+    {% if stats.class_counts %}
+    {% set fake_n = stats.class_counts.get(1, 0) %}
+    {% set legit_n = stats.class_counts.get(0, 0) %}
+    {% set total_n = fake_n + legit_n %}
+    {% set imbalance_ratio = (fake_n / total_n) if total_n > 0 else 0 %}
+    {% if imbalance_ratio < 0.25 or imbalance_ratio > 0.75 %}
+    <div class="alert alert-warning rounded-4 mb-4">
+      <i class="bi bi-exclamation-triangle me-2"></i>
+      <strong>Class imbalance detected!</strong>
+      Fake: {{ fake_n }} ({{ "%.1f"|format(imbalance_ratio*100) }}%) vs Legit: {{ legit_n }}.
+      Consider collecting more data for the minority class or using class weighting.
+    </div>
+    {% else %}
+    <div class="alert alert-success rounded-4 mb-4">
+      <i class="bi bi-check-circle me-2"></i>
+      Dataset is reasonably balanced (Fake: {{ "%.1f"|format(imbalance_ratio*100) }}%).
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- Charts -->
+    <div class="row g-3 mb-4">
+      {% if stats_charts.class_dist %}
+      <div class="col-md-4">
+        <div class="card shadow-sm rounded-4">
+          <div class="card-body p-3">
+            <h3 class="h6 mb-2">Class Distribution</h3>
+            <img src="{{ url_for('static', filename=stats_charts.class_dist) }}"
+                 class="img-fluid rounded">
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% if stats_charts.correlation %}
+      <div class="col-md-8">
+        <div class="card shadow-sm rounded-4">
+          <div class="card-body p-3">
+            <h3 class="h6 mb-2">Feature Correlation Matrix</h3>
+            <img src="{{ url_for('static', filename=stats_charts.correlation) }}"
+                 class="img-fluid rounded">
+          </div>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    {% if stats_charts.distributions %}
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-3">
+        <h3 class="h6 mb-2">
+          <i class="bi bi-bar-chart me-2"></i>Feature Distributions — Fake vs Legit
+        </h3>
+        <img src="{{ url_for('static', filename=stats_charts.distributions) }}"
+             class="img-fluid rounded w-100">
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Feature stats table -->
+    <div class="card shadow-sm rounded-4 mb-4">
+      <div class="card-body p-4">
+        <h3 class="h6 mb-3"><i class="bi bi-table me-2"></i>Feature Statistics</h3>
+        <div class="table-responsive">
+          <table class="table table-sm table-hover">
+            <thead class="table-light">
+              <tr>
+                <th>Feature</th>
+                <th>Description</th>
+                <th>Mean</th>
+                <th>Std Dev</th>
+                <th>Min</th>
+                <th>Max</th>
+                <th>Median</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for feat, s in stats.numeric_stats.items() %}
+              <tr>
+                <td class="fw-semibold font-monospace small">{{ feat }}</td>
+                <td class="small text-muted">{{ feature_descriptions.get(feat, '—') }}</td>
+                <td>{{ s.mean }}</td>
+                <td>{{ s.std }}</td>
+                <td>{{ s.min }}</td>
+                <td>{{ s.max }}</td>
+                <td>{{ s.median }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Missing data info -->
+    <div class="card rounded-4 mb-4
+      {% if stats.missing_pct > 20 %}border-warning{% elif stats.missing_pct > 5 %}border-info{% else %}border-success{% endif %}">
+      <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="small fw-semibold">Missing Data</div>
+            <div class="small text-muted">Average across all features</div>
+          </div>
+          <div class="text-end">
+            <div class="fs-4 fw-bold {% if stats.missing_pct > 20 %}text-warning{% elif stats.missing_pct > 5 %}text-info{% else %}text-success{% endif %}">
+              {{ stats.missing_pct }}%
+            </div>
+          </div>
+        </div>
+        <div class="progress mt-2" style="height:6px">
+          <div class="progress-bar {% if stats.missing_pct > 20 %}bg-warning{% elif stats.missing_pct > 5 %}bg-info{% else %}bg-success{% endif %}"
+               style="width:{{ stats.missing_pct }}%"></div>
+        </div>
+        {% if stats.missing_pct > 5 %}
+        <div class="small text-muted mt-1">
+          <i class="bi bi-info-circle me-1"></i>The model uses median imputation to handle missing values automatically.
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

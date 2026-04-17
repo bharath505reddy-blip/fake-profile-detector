@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Synthetic Data Generator — FakeProfileAI{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between mb-3">
+  <div>
+    <h1 class="h4 mb-1"><i class="bi bi-database-fill-add me-2 text-primary"></i>Synthetic Data Generator</h1>
+    <p class="text-muted small mb-0">Generate realistic labeled training data for any platform</p>
+  </div>
+  <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">
+    <i class="bi bi-arrow-left me-1"></i>Back
+  </a>
+</div>
+
+<div class="row g-4">
+  <!-- Generator Form -->
+  <div class="col-lg-4">
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <h6 class="fw-bold mb-3"><i class="bi bi-sliders me-2 text-primary"></i>Generation Settings</h6>
+        <form method="POST" id="genForm">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Platform</label>
+            <select name="platform" class="form-select" required>
+              {% for p in platforms %}
+              <option value="{{ p }}" {% if request.form.get('platform')==p %}selected{% endif %}>
+                {{ p|capitalize }}
+              </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Total Profiles</label>
+            <input type="number" name="total_count" class="form-control"
+                   value="{{ request.form.get('total_count', 1000) }}"
+                   min="100" max="10000" step="100" required>
+            <div class="form-text">100 – 10,000 profiles</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label fw-semibold d-flex justify-content-between">
+              Fake Ratio
+              <span class="badge text-bg-danger" id="ratioLabel">
+                {{ (request.form.get('fake_ratio', 0.4)|float * 100)|int }}%
+              </span>
+            </label>
+            <input type="range" name="fake_ratio" class="form-range" id="ratioSlider"
+                   value="{{ request.form.get('fake_ratio', 0.4) }}"
+                   min="0.1" max="0.9" step="0.05">
+            <div class="d-flex justify-content-between small text-muted">
+              <span>10% fake</span><span>90% fake</span>
+            </div>
+          </div>
+
+          <div class="mb-3 form-check">
+            <input type="checkbox" class="form-check-input" name="add_noise" id="addNoise"
+                   value="1" {% if request.form.get('add_noise', '1')=='1' %}checked{% endif %}>
+            <label class="form-check-label" for="addNoise">
+              Add noise <span class="text-muted small">(prevents trivial separation)</span>
+            </label>
+          </div>
+
+          <div class="d-grid gap-2">
+            <button type="submit" name="action" value="generate" class="btn btn-primary" id="genBtn">
+              <i class="bi bi-play-fill me-1"></i>Generate Dataset
+            </button>
+            <button type="submit" name="action" value="generate_train" class="btn btn-success">
+              <i class="bi bi-cpu me-1"></i>Generate + Train Model
+            </button>
+          </div>
+        </form>
+
+        <!-- Info accordion -->
+        <div class="accordion mt-4" id="infoAccordion">
+          <div class="accordion-item border-0 bg-transparent">
+            <h2 class="accordion-header">
+              <button class="accordion-button collapsed px-0 bg-transparent shadow-none small fw-semibold"
+                      type="button" data-bs-toggle="collapse" data-bs-target="#infoPanel">
+                <i class="bi bi-info-circle me-2"></i>What is synthetic data?
+              </button>
+            </h2>
+            <div id="infoPanel" class="accordion-collapse collapse">
+              <div class="accordion-body px-0 small text-muted">
+                Synthetic data mimics real-world fake and legitimate profile patterns without
+                using actual user data. It allows you to train and evaluate models when labeled
+                real data is unavailable. Fake profiles include bot-like patterns (extreme ratios,
+                spammy bios, burst posting). Legit profiles follow organic growth patterns.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Results Panel -->
+  <div class="col-lg-8">
+    {% if generation_error %}
+    <div class="alert alert-danger rounded-4">
+      <i class="bi bi-x-circle me-2"></i>{{ generation_error }}
+    </div>
+    {% endif %}
+
+    {% if generated_stats %}
+    <!-- Stats cards -->
+    <div class="row g-3 mb-4">
+      <div class="col-6 col-md-3">
+        <div class="card text-center rounded-4 border-0 shadow-sm bg-primary bg-opacity-10">
+          <div class="card-body py-3">
+            <div class="h4 mb-0 fw-bold text-primary">{{ generated_stats.total }}</div>
+            <div class="small text-muted">Total</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card text-center rounded-4 border-0 shadow-sm bg-danger bg-opacity-10">
+          <div class="card-body py-3">
+            <div class="h4 mb-0 fw-bold text-danger">{{ generated_stats.fake_count }}</div>
+            <div class="small text-muted">Fake</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card text-center rounded-4 border-0 shadow-sm bg-success bg-opacity-10">
+          <div class="card-body py-3">
+            <div class="h4 mb-0 fw-bold text-success">{{ generated_stats.legit_count }}</div>
+            <div class="small text-muted">Legit</div>
+          </div>
+        </div>
+      </div>
+      <div class="col-6 col-md-3">
+        <div class="card text-center rounded-4 border-0 shadow-sm bg-warning bg-opacity-10">
+          <div class="card-body py-3">
+            <div class="h4 mb-0 fw-bold text-warning">{{ (generated_stats.fake_ratio * 100)|round(1) }}%</div>
+            <div class="small text-muted">Fake Ratio</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Download button -->
+    {% if download_file %}
+    <div class="d-flex gap-2 mb-3">
+      <a href="{{ url_for('download_result', filename=download_file) }}"
+         class="btn btn-success">
+        <i class="bi bi-download me-1"></i>Download CSV
+      </a>
+      <span class="text-muted small align-self-center">
+        {{ generated_stats.total }} rows · {{ generated_stats.column_count }} columns
+      </span>
+    </div>
+    {% endif %}
+    {% endif %}
+
+    {% if preview_rows %}
+    <div class="card shadow-sm rounded-4">
+      <div class="card-header border-0 bg-transparent d-flex align-items-center gap-2 pt-3">
+        <i class="bi bi-table text-primary"></i>
+        <span class="fw-semibold">Preview (first {{ preview_rows|length }} rows)</span>
+      </div>
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table id="previewTable" class="table table-sm table-hover mb-0 small">
+            <thead class="table-light">
+              <tr>
+                {% for col in preview_columns %}
+                <th>{{ col }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in preview_rows %}
+              <tr class="{% if row.get('label')==1 %}table-danger{% elif row.get('label')==0 %}table-success{% endif %} table-opacity-25">
+                {% for col in preview_columns %}
+                <td title="{{ row.get(col, '') }}">
+                  {% set val = row.get(col, '') %}
+                  {% if val is not none %}
+                    {{ val|string|truncate(30, True, '…') }}
+                  {% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    {% elif not generation_error %}
+    <div class="card rounded-4 border-dashed text-center py-5">
+      <div class="card-body text-muted">
+        <i class="bi bi-database-slash fs-1 d-block mb-3 opacity-25"></i>
+        <div class="fw-semibold">No data generated yet</div>
+        <div class="small">Select a platform and click Generate Dataset</div>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Slider value display
+const slider = document.getElementById('ratioSlider');
+const label = document.getElementById('ratioLabel');
+slider.addEventListener('input', function() {
+  label.textContent = Math.round(this.value * 100) + '%';
+});
+
+// Show spinner on submit
+document.getElementById('genForm').addEventListener('submit', function(e) {
+  const btn = document.getElementById('genBtn');
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating…';
+  btn.disabled = true;
+});
+
+// Initialize DataTable if preview exists
+document.addEventListener('DOMContentLoaded', function() {
+  if (document.getElementById('previewTable')) {
+    new DataTable('#previewTable', {
+      pageLength: 10,
+      scrollX: true,
+      dom: 'frtip',
+      language: { search: 'Filter:' }
+    });
+  }
+});
+</script>
+{% endblock %}

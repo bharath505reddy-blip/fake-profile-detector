@@ -1,0 +1,389 @@
+{% extends "base.html" %}
+{% block title %}Results — {{ platform|capitalize }}{% endblock %}
+{% block content %}
+
+<!-- Network graph script CDN -->
+<script src="https://cdn.jsdelivr.net/npm/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+
+<div class="row g-3">
+
+  <!-- LEFT: Summary panel -->
+  <div class="col-lg-3">
+    <div class="card shadow-sm rounded-4 mb-3 sticky-lg-top" style="top: 80px;">
+      <div class="card-body p-4">
+        <div class="text-muted small text-uppercase mb-1">Platform</div>
+        <div class="h5 text-capitalize fw-bold mb-3">
+          {{ platform }}
+        </div>
+
+        <!-- Metric boxes -->
+        <div class="metric-box rounded-3 p-3 mb-2 border-start border-danger border-3">
+          <div class="text-muted small">Fake profiles</div>
+          <div class="display-6 fw-bold text-danger">{{ fake_count }}</div>
+        </div>
+
+        <div class="metric-box rounded-3 p-3 mb-2 border-start border-success border-3">
+          <div class="text-muted small">Legit profiles</div>
+          <div class="display-6 fw-bold text-success">{{ legit_count }}</div>
+        </div>
+
+        {% if uncertain_count > 0 %}
+        <div class="metric-box rounded-3 p-3 mb-2 border-start border-warning border-3">
+          <div class="text-muted small">Uncertain</div>
+          <div class="display-6 fw-bold text-warning">{{ uncertain_count }}</div>
+        </div>
+        {% endif %}
+
+        {% if total_rows > 0 %}
+        <div class="metric-box rounded-3 p-3 mb-3 border-start border-primary border-3">
+          <div class="text-muted small">Fake rate</div>
+          <div class="h4 fw-bold text-primary">
+            {{ "%.1f"|format(fake_count / total_rows * 100) }}%
+          </div>
+          <div class="progress mt-1" style="height:5px">
+            <div class="progress-bar bg-danger" style="width:{{ (fake_count/total_rows*100)|round }}%"></div>
+          </div>
+        </div>
+        {% endif %}
+
+        <!-- Confidence threshold slider -->
+        <div class="mb-3">
+          <label class="form-label small text-muted d-flex justify-content-between">
+            <span>Min. Confidence Filter</span>
+            <span id="threshVal" class="fw-semibold text-primary">0%</span>
+          </label>
+          <input type="range" class="form-range" id="confThreshold"
+                 min="0" max="100" step="5" value="0">
+          <div class="small text-muted">Hide rows below this confidence</div>
+        </div>
+
+        <!-- Export buttons -->
+        <div class="d-flex flex-column gap-2">
+          {% if result_file %}
+          <a class="btn btn-success w-100" href="{{ url_for('download_result', filename=result_file) }}">
+            <i class="bi bi-download me-1"></i>Download CSV
+          </a>
+          <a class="btn btn-outline-danger w-100"
+             href="{{ url_for('export_pdf', platform=platform, result_file=result_file) }}">
+            <i class="bi bi-file-earmark-pdf me-1"></i>Export PDF
+          </a>
+          <a class="btn btn-outline-success w-100"
+             href="{{ url_for('export_excel', platform=platform, result_file=result_file) }}">
+            <i class="bi bi-file-earmark-excel me-1"></i>Export Excel
+          </a>
+          {% endif %}
+          <a class="btn btn-outline-primary w-100" href="{{ url_for('index') }}">
+            <i class="bi bi-arrow-left me-1"></i>New Analysis
+          </a>
+        </div>
+
+        <hr>
+        <div class="d-flex flex-column gap-1">
+          <a href="{{ url_for('dataset_stats', platform=platform) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-graph-up me-1"></i>Dataset Stats
+          </a>
+          <a href="{{ url_for('benchmark') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-trophy me-1"></i>Benchmark
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT: Charts + Table -->
+  <div class="col-lg-9">
+
+    <!-- Charts row -->
+    {% if bar or pie %}
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-3"><i class="bi bi-bar-chart me-2"></i>Distribution Charts</h2>
+        <div class="row g-3">
+          {% if bar %}
+          <div class="col-md-6">
+            <img src="{{ url_for('static', filename=bar) }}"
+                 class="img-fluid rounded shadow-sm w-100">
+          </div>
+          {% endif %}
+          {% if pie %}
+          <div class="col-md-6">
+            <img src="{{ url_for('static', filename=pie) }}"
+                 class="img-fluid rounded shadow-sm w-100">
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- SHAP Chart -->
+    {% if shap_chart %}
+    <div class="card shadow-sm rounded-4 mb-3 border-warning">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-1">
+          <i class="bi bi-lightbulb text-warning me-2"></i>SHAP — Feature Impact Explanation
+        </h2>
+        <p class="text-muted small mb-3">
+          Shows which features most influenced the Fake/Legit predictions across the dataset.
+          Higher = stronger impact on <span class="text-danger fw-semibold">Fake</span> classification.
+        </p>
+        <img src="{{ url_for('static', filename=shap_chart) }}"
+             class="img-fluid rounded shadow-sm w-100">
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Feature Importance chart -->
+    {% if importance_chart %}
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-1"><i class="bi bi-bar-chart-horizontal me-2"></i>Feature Importance (Random Forest)</h2>
+        <p class="text-muted small mb-3">Red bars = above-average importance.</p>
+        <img src="{{ url_for('static', filename=importance_chart) }}"
+             class="img-fluid rounded shadow-sm w-100">
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Dataset distribution chart -->
+    {% if stats_dist_chart %}
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body p-4">
+        <h2 class="h6 mb-1"><i class="bi bi-graph-up me-2"></i>Feature Distributions (Training Data)</h2>
+        <img src="{{ url_for('static', filename=stats_dist_chart) }}"
+             class="img-fluid rounded shadow-sm w-100">
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- Network Graph -->
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <h2 class="h6 mb-0">
+            <i class="bi bi-diagram-3 me-2"></i>Profile Network Graph
+          </h2>
+          <span class="badge text-bg-secondary small">Top 50 profiles</span>
+        </div>
+        <p class="text-muted small mb-3">
+          <span class="badge text-bg-danger">Red</span> = Fake &nbsp;
+          <span class="badge text-bg-success">Green</span> = Legit &nbsp;
+          Node size ∝ follower count. Hover for details.
+        </p>
+        <div id="network-graph" style="height: 380px; border-radius: 8px; overflow: hidden;"></div>
+      </div>
+    </div>
+
+    <!-- Results table -->
+    <div class="card shadow-sm rounded-4">
+      <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h2 class="h6 mb-0">
+            <i class="bi bi-table me-2"></i>Prediction Results
+            {% if total_rows > rows|length %}
+              <span class="text-muted fw-normal small">(showing first {{ rows|length }} of {{ total_rows }})</span>
+            {% else %}
+              <span class="text-muted fw-normal small">({{ total_rows }} rows)</span>
+            {% endif %}
+          </h2>
+          <div class="d-flex gap-2 align-items-center">
+            <span id="filteredCount" class="badge text-bg-secondary d-none"></span>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table id="results-table" class="table table-sm align-middle table-hover" style="width:100%">
+            <thead class="table-light">
+              <tr>
+                {% for c in columns %}
+                  <th class="text-nowrap small">
+                    {{ c }}
+                    {% if feature_descriptions.get(c) %}
+                    <i class="bi bi-question-circle text-muted ms-1"
+                       data-bs-toggle="tooltip"
+                       title="{{ feature_descriptions[c] }}"></i>
+                    {% endif %}
+                  </th>
+                {% endfor %}
+                <th class="text-nowrap small">Flag</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in rows %}
+                <tr data-confidence="{{ row.get('confidence', 100) or 100 }}">
+                  {% for c in columns %}
+                    {% if c == "prediction" %}
+                      <td class="text-nowrap">
+                        {% if row.get(c) == "Fake" %}
+                          <span class="badge text-bg-danger">
+                            <i class="bi bi-x me-1"></i>Fake
+                          </span>
+                        {% elif row.get(c) == "Uncertain" %}
+                          <span class="badge text-bg-warning">
+                            <i class="bi bi-question me-1"></i>Uncertain
+                          </span>
+                        {% else %}
+                          <span class="badge text-bg-success">
+                            <i class="bi bi-check me-1"></i>Legit
+                          </span>
+                        {% endif %}
+                      </td>
+                    {% elif c == "confidence" %}
+                      <td class="text-nowrap">
+                        {% set conf = row.get(c) %}
+                        {% if conf is not none and conf == conf %}
+                          <div class="d-flex align-items-center gap-1">
+                            <div class="progress flex-grow-1" style="height:6px;min-width:60px">
+                              <div class="progress-bar
+                                {% if row.get('prediction') == 'Fake' %}bg-danger{% elif row.get('prediction') == 'Uncertain' %}bg-warning{% else %}bg-success{% endif %}"
+                                style="width:{{ conf }}%">
+                              </div>
+                            </div>
+                            <span class="small text-muted">{{ conf }}%</span>
+                          </div>
+                        {% else %}
+                          —
+                        {% endif %}
+                      </td>
+                    {% elif c == "anomaly_flag" %}
+                      <td>
+                        {% if row.get(c) == "Anomaly" %}
+                          <span class="badge text-bg-warning">
+                            <i class="bi bi-exclamation-triangle me-1"></i>Anomaly
+                          </span>
+                        {% else %}
+                          <span class="badge text-bg-secondary">Normal</span>
+                        {% endif %}
+                      </td>
+                    {% else %}
+                      <td class="text-nowrap small">{{ row.get(c, "") }}</td>
+                    {% endif %}
+                  {% endfor %}
+                  <td>
+                    <button class="btn btn-sm btn-outline-secondary flag-btn py-0 px-1"
+                            data-platform="{{ platform }}"
+                            data-prediction="{{ row.get('prediction', '') }}"
+                            data-confidence="{{ row.get('confidence', '') }}"
+                            data-profile='{{ row | tojson }}'
+                            title="Flag as incorrect">
+                      <i class="bi bi-flag small"></i>
+                    </button>
+                  </td>
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // DataTable
+  const dt = $('#results-table').DataTable({
+    pageLength: 25,
+    order: [],
+    scrollX: true,
+    language: { search: "Filter:" },
+  });
+
+  // Confidence threshold slider
+  const slider = document.getElementById('confThreshold');
+  const threshVal = document.getElementById('threshVal');
+  const filteredCount = document.getElementById('filteredCount');
+
+  slider.addEventListener('input', function() {
+    const threshold = parseFloat(this.value);
+    threshVal.textContent = threshold + '%';
+
+    let hidden = 0;
+    document.querySelectorAll('#results-table tbody tr').forEach(row => {
+      const conf = parseFloat(row.dataset.confidence || '100');
+      if (conf < threshold) {
+        row.style.display = 'none';
+        hidden++;
+      } else {
+        row.style.display = '';
+      }
+    });
+
+    if (hidden > 0) {
+      filteredCount.textContent = `${hidden} rows hidden`;
+      filteredCount.classList.remove('d-none');
+    } else {
+      filteredCount.classList.add('d-none');
+    }
+  });
+
+  // Network graph
+  const networkData = {{ network_data|safe }};
+  const container = document.getElementById('network-graph');
+  if (container && networkData.nodes && networkData.nodes.length > 0) {
+    const isDark = document.documentElement.getAttribute('data-bs-theme') === 'dark';
+    const options = {
+      nodes: {
+        shape: 'dot',
+        font: { size: 11, color: isDark ? '#fff' : '#333' },
+        borderWidth: 1.5,
+        borderWidthSelected: 3,
+      },
+      edges: {
+        width: 1,
+        smooth: { type: 'continuous' },
+      },
+      physics: {
+        stabilization: { iterations: 100 },
+        barnesHut: { gravitationalConstant: -3000, springLength: 80 },
+      },
+      interaction: {
+        hover: true,
+        tooltipDelay: 100,
+      },
+    };
+    new vis.Network(container, networkData, options);
+  } else if (container) {
+    container.innerHTML = '<div class="text-center text-muted py-5">No network data available.</div>';
+  }
+
+  // Flag as incorrect — send feedback via AJAX
+  document.querySelectorAll('.flag-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      const platform = this.dataset.platform;
+      const prediction = this.dataset.prediction;
+      const confidence = this.dataset.confidence;
+      const profileData = this.dataset.profile;
+      const csrf = document.querySelector('input[name=csrf_token]')?.value || '';
+
+      const correction = prompt(
+        `Flag this ${prediction} prediction as incorrect.\nEnter correct label (Fake / Legit) or leave blank to just flag:`,
+        prediction === 'Fake' ? 'Legit' : 'Fake'
+      );
+      if (correction === null) return; // cancelled
+
+      fetch('/feedback/flag', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          csrf_token: csrf,
+          platform: platform,
+          predicted_label: prediction,
+          corrected_label: correction.trim() || '',
+          confidence: confidence,
+          profile_data_json: profileData,
+        })
+      })
+      .then(r => r.json())
+      .then(data => {
+        this.innerHTML = '<i class="bi bi-flag-fill small text-warning"></i>';
+        this.disabled = true;
+        this.title = 'Feedback recorded';
+      })
+      .catch(() => alert('Could not save feedback. Please try again.'));
+    });
+  });
+</script>
+{% endblock %}

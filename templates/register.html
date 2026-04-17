@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Register — FakeProfileAI{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-md-5 col-lg-4">
+    <div class="card shadow-sm rounded-4 mt-4">
+      <div class="card-body p-4">
+        <div class="text-center mb-4">
+          <i class="bi bi-person-plus fs-1 text-primary d-block mb-2"></i>
+          <h1 class="h5 mb-0">
+            {% if first_user %}Create Admin Account{% else %}Create User{% endif %}
+          </h1>
+          {% if first_user %}
+          <p class="text-muted small mt-1">First registered user becomes admin.</p>
+          {% endif %}
+        </div>
+        <form method="POST">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+          <div class="mb-3">
+            <label class="form-label fw-semibold">Username</label>
+            <input type="text" class="form-control" name="username" autofocus required>
+          </div>
+          <div class="mb-4">
+            <label class="form-label fw-semibold">Password</label>
+            <input type="password" class="form-control" name="password" required minlength="6">
+            <div class="form-text">At least 6 characters.</div>
+          </div>
+          <button class="btn btn-primary w-100">
+            <i class="bi bi-person-check me-2"></i>Create Account
+          </button>
+        </form>
+        <hr>
+        <div class="text-center small text-muted">
+          Already have an account? <a href="{{ url_for('login') }}">Login</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

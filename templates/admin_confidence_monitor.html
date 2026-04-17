@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% block title %}Confidence Monitor{% endblock %}
+{% block content %}
+<div class="row justify-content-center">
+  <div class="col-lg-10">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1 class="h4 mb-0">
+        <i class="bi bi-speedometer2 me-2 text-primary"></i>Confidence Monitor
+      </h1>
+      <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-secondary">Back</a>
+    </div>
+
+    <p class="text-muted mb-4">
+      Per-platform confidence distribution from prediction history.
+      Platforms with high low-confidence rates may benefit from recalibration or retraining.
+    </p>
+
+    <div class="row g-3">
+      {% for platform in platforms %}
+      {% set s = stats.get(platform, {}) %}
+      <div class="col-md-6 col-lg-4">
+        <div class="card shadow-sm rounded-4 h-100">
+          <div class="card-body p-3">
+            <div class="d-flex justify-content-between align-items-start mb-2">
+              <h2 class="h6 text-capitalize mb-0">{{ platform }}</h2>
+              {% if s.model_exists %}
+              <span class="badge bg-success bg-opacity-15 text-success border border-success small">Model ready</span>
+              {% else %}
+              <span class="badge bg-secondary small">No model</span>
+              {% endif %}
+            </div>
+
+            {% if s.count > 0 %}
+            <div class="row text-center g-2 mb-2">
+              <div class="col-4">
+                <div class="fw-bold">{{ s.count }}</div>
+                <div class="small text-muted">Predictions</div>
+              </div>
+              <div class="col-4">
+                <div class="fw-bold
+                  {% if s.mean >= 75 %}text-success{% elif s.mean >= 60 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ s.mean }}%
+                </div>
+                <div class="small text-muted">Avg Conf.</div>
+              </div>
+              <div class="col-4">
+                <div class="fw-bold
+                  {% if s.low_conf_pct < 20 %}text-success{% elif s.low_conf_pct < 40 %}text-warning{% else %}text-danger{% endif %}">
+                  {{ s.low_conf_pct }}%
+                </div>
+                <div class="small text-muted">Low-conf.</div>
+              </div>
+            </div>
+
+            <!-- Low-confidence bar -->
+            <div class="mb-3">
+              <div class="progress" style="height:6px;border-radius:3px;">
+                <div class="progress-bar
+                  {% if s.low_conf_pct < 20 %}bg-success{% elif s.low_conf_pct < 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                  style="width:{{ s.low_conf_pct }}%">
+                </div>
+              </div>
+              <div class="small text-muted mt-1">{{ s.low_conf_count }} predictions below 60% confidence</div>
+            </div>
+            {% else %}
+            <p class="text-muted small mb-3">No prediction history yet.</p>
+            {% endif %}
+
+            {% if s.model_exists %}
+            <button class="btn btn-sm btn-outline-primary w-100 recalibrate-btn"
+                    data-platform="{{ platform }}"
+                    {% if s.count == 0 %}disabled title="No predictions to calibrate from"{% endif %}>
+              <i class="bi bi-arrow-repeat me-1"></i>Re-calibrate
+            </button>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+
+    <div id="recalibrateStatus" class="mt-3"></div>
+    <input type="hidden" name="csrf_token" id="csrf_token" value="{{ csrf_token() }}">
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.querySelectorAll('.recalibrate-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    const platform = this.dataset.platform;
+    const statusDiv = document.getElementById('recalibrateStatus');
+    this.disabled = true;
+    this.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Recalibrating...';
+
+    const csrfToken = document.getElementById('csrf_token')?.value || '';
+
+    fetch(`/admin/recalibrate/${platform}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+    })
+    .then(r => r.json())
+    .then(data => {
+      const cls = data.ok ? 'success' : 'warning';
+      const icon = data.ok ? 'check-circle' : 'exclamation-triangle';
+      statusDiv.innerHTML = `
+        <div class="alert alert-${cls} rounded-4 alert-dismissible fade show" role="alert">
+          <i class="bi bi-${icon} me-2"></i>${data.message}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>`;
+      this.disabled = false;
+      this.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Re-calibrate';
+    })
+    .catch(err => {
+      statusDiv.innerHTML = `<div class="alert alert-danger rounded-4">Network error: ${err}</div>`;
+      this.disabled = false;
+      this.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Re-calibrate';
+    });
+  });
+});
+</script>
+{% endblock %}
