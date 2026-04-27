@@ -1,19 +1,29 @@
 {% extends "base.html" %}
 {% block title %}{{ platform|capitalize }} — Single Profile Check{% endblock %}
+
+{% set MULTI_PLATFORM_OPTIONS = [
+  ("facebook","Facebook"),("twitter","Twitter/X"),("linkedin","LinkedIn"),
+  ("github","GitHub"),("youtube","YouTube"),("tiktok","TikTok"),
+  ("reddit","Reddit"),("discord","Discord"),("snapchat","Snapchat"),
+  ("instagram","Instagram")
+] %}
+
 {% block content %}
 <div class="row justify-content-center">
-  <div class="col-lg-8">
+  <div class="col-lg-9">
 
-    <!-- Result card -->
+    <!-- ============================================================ -->
+    <!-- Result panel (only shown when prediction has run)           -->
+    <!-- ============================================================ -->
     {% if result %}
     <div class="card shadow-sm rounded-4 mb-4
       {% if result == 'Fake' %}border-danger border-2{% else %}border-success border-2{% endif %}">
       <div class="card-body p-4 text-center">
-
-        <!-- Analysis depth badge -->
         {% if analysis_depth %}
         <div class="mb-2">
-          {% if analysis_depth == 'deep' %}
+          {% if analysis_depth == 'manual_comprehensive' %}
+          <span class="badge bg-info"><i class="bi bi-clipboard-data me-1"></i>Manual Comprehensive</span>
+          {% elif analysis_depth == 'deep' %}
           <span class="badge bg-primary"><i class="bi bi-layers me-1"></i>Deep Analysis</span>
           {% else %}
           <span class="badge bg-secondary"><i class="bi bi-lightning me-1"></i>Quick Scan</span>
@@ -23,361 +33,105 @@
 
         <div class="mb-1 text-muted small text-uppercase letter-spacing-1">Prediction Result</div>
         {% if result == "Fake" %}
-          <div class="display-4 fw-bold text-danger">
-            <i class="bi bi-x-circle me-2"></i>Fake
-          </div>
+          <div class="display-4 fw-bold text-danger"><i class="bi bi-x-circle me-2"></i>Fake</div>
         {% else %}
-          <div class="display-4 fw-bold text-success">
-            <i class="bi bi-check-circle me-2"></i>Legit
-          </div>
+          <div class="display-4 fw-bold text-success"><i class="bi bi-check-circle me-2"></i>Legit</div>
         {% endif %}
 
         {% if confidence is not none %}
           <div class="mt-2 text-muted">
             Confidence:
-            <strong class="fs-5 {% if result == 'Fake' %}text-danger{% else %}text-success{% endif %}">
-              {{ confidence }}%
-            </strong>
-            {% if confidence_label %}
-            <span class="badge bg-light text-dark border ms-1">{{ confidence_label }}</span>
-            {% endif %}
+            <strong class="fs-5 {% if result == 'Fake' %}text-danger{% else %}text-success{% endif %}">{{ confidence }}%</strong>
+            {% if confidence_label %}<span class="badge bg-light text-dark border ms-1">{{ confidence_label }}</span>{% endif %}
           </div>
           <div class="progress mt-2 mx-auto" style="height:10px;max-width:300px;border-radius:5px;">
             <div class="progress-bar {% if result == 'Fake' %}bg-danger{% else %}bg-success{% endif %}"
-              style="width:{{ confidence }}%">
-            </div>
+                 style="width:{{ confidence }}%"></div>
           </div>
-          <div class="mt-2 small text-muted">
-            {% if result == "Fake" %}
-              <i class="bi bi-exclamation-triangle text-warning me-1"></i>
-              This profile shows characteristics consistent with fake/bot accounts.
-            {% else %}
-              <i class="bi bi-check2 text-success me-1"></i>
-              This profile appears to be a genuine account.
-            {% endif %}
-          </div>
-        {% endif %}
 
-        <!-- Deep analysis trigger button (when quick scan is uncertain) -->
-        {% if not analysis_depth or analysis_depth == 'quick' %}
-        {% if confidence and confidence > 40 and confidence < 80 %}
-        <div class="mt-3">
-          <button class="btn btn-primary btn-sm" id="deepAnalysisBtn" type="button">
-            <i class="bi bi-layers me-1"></i>Run Deep Analysis
-          </button>
-          <p class="text-muted small mt-1">Quick scan uncertainty detected — deep analysis may improve accuracy.</p>
-        </div>
-        {% endif %}
+          {% if data_coverage is not none %}
+          <div class="mt-2 small text-muted">
+            <i class="bi bi-clipboard-check me-1"></i>
+            Data coverage: <strong>{{ fields_filled or 0 }}</strong> of {{ fields_total or 0 }} fields filled
+            ({{ (data_coverage * 100)|round|int }}%)
+          </div>
+          {% endif %}
         {% endif %}
       </div>
     </div>
 
-    <!-- Confidence breakdown panel -->
+    <!-- Forensic / cross-platform / photo result blocks -->
     {% if confidence_explanation %}
     <div class="card shadow-sm rounded-4 mb-4">
       <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h2 class="h6 mb-0">
-            <i class="bi bi-bar-chart-line me-2 text-primary"></i>Confidence Breakdown
-          </h2>
-          {% if confidence_explanation.signal_count_total %}
-          <span class="badge bg-secondary">
-            {{ confidence_explanation.signal_count_agreeing }}/{{ confidence_explanation.signal_count_total }} signals agree
-          </span>
-          {% endif %}
-        </div>
-
-        <!-- Data coverage bar -->
+        <h2 class="h6 mb-3"><i class="bi bi-bar-chart-line me-2 text-primary"></i>Confidence Breakdown</h2>
         {% if confidence_explanation.data_coverage_pct is not none %}
         <div class="mb-3">
           <div class="d-flex justify-content-between small text-muted mb-1">
-            <span>Data Coverage</span>
-            <span>{{ confidence_explanation.data_coverage_pct|round|int }}%</span>
+            <span>Data Coverage</span><span>{{ confidence_explanation.data_coverage_pct|round|int }}%</span>
           </div>
           <div class="progress" style="height:8px;border-radius:4px;">
             <div class="progress-bar
               {% if confidence_explanation.data_coverage_pct >= 70 %}bg-success
               {% elif confidence_explanation.data_coverage_pct >= 40 %}bg-warning
               {% else %}bg-danger{% endif %}"
-              style="width:{{ confidence_explanation.data_coverage_pct }}%">
-            </div>
+              style="width:{{ confidence_explanation.data_coverage_pct }}%"></div>
           </div>
-          {% if confidence_explanation.data_coverage_pct < 50 %}
-          <div class="small text-muted mt-1">
-            <i class="bi bi-info-circle me-1"></i>Low data coverage may reduce prediction accuracy.
-          </div>
-          {% endif %}
         </div>
         {% endif %}
-
         <div class="row g-3">
-          <!-- Strong signals -->
           {% if confidence_explanation.strong_signals %}
           <div class="col-md-6">
-            <h3 class="small fw-semibold text-muted mb-2">
-              <i class="bi bi-check-circle-fill text-success me-1"></i>Strong Signals
-            </h3>
-            <ul class="list-unstyled mb-0">
-              {% for sig in confidence_explanation.strong_signals %}
-              <li class="small mb-1">
-                <span class="text-success me-1">✓</span>{{ sig }}
-              </li>
-              {% endfor %}
-            </ul>
+            <h3 class="small fw-semibold text-muted mb-2"><i class="bi bi-check-circle-fill text-success me-1"></i>Strong Signals</h3>
+            <ul class="list-unstyled mb-0">{% for s in confidence_explanation.strong_signals %}<li class="small mb-1"><span class="text-success me-1">✓</span>{{ s }}</li>{% endfor %}</ul>
           </div>
           {% endif %}
-
-          <!-- Weak / missing signals -->
           {% if confidence_explanation.weak_signals or confidence_explanation.missing_signals %}
           <div class="col-md-6">
             {% if confidence_explanation.weak_signals %}
-            <h3 class="small fw-semibold text-muted mb-2">
-              <i class="bi bi-dash-circle text-warning me-1"></i>Weak / Inconclusive
-            </h3>
-            <ul class="list-unstyled mb-0">
-              {% for sig in confidence_explanation.weak_signals %}
-              <li class="small mb-1">
-                <span class="text-warning me-1">–</span>{{ sig }}
-              </li>
-              {% endfor %}
-            </ul>
+            <h3 class="small fw-semibold text-muted mb-2"><i class="bi bi-dash-circle text-warning me-1"></i>Weak / Inconclusive</h3>
+            <ul class="list-unstyled mb-0">{% for s in confidence_explanation.weak_signals %}<li class="small mb-1"><span class="text-warning me-1">–</span>{{ s }}</li>{% endfor %}</ul>
             {% endif %}
             {% if confidence_explanation.missing_signals %}
-            <h3 class="small fw-semibold text-muted mt-2 mb-2">
-              <i class="bi bi-question-circle text-secondary me-1"></i>Missing Data
-            </h3>
-            <ul class="list-unstyled mb-0">
-              {% for sig in confidence_explanation.missing_signals %}
-              <li class="small mb-1 text-muted">
-                <span class="me-1">?</span>{{ sig }}
-              </li>
-              {% endfor %}
-            </ul>
+            <h3 class="small fw-semibold text-muted mt-2 mb-2"><i class="bi bi-question-circle text-secondary me-1"></i>Missing Data</h3>
+            <ul class="list-unstyled mb-0">{% for s in confidence_explanation.missing_signals %}<li class="small mb-1 text-muted"><span class="me-1">?</span>{{ s }}</li>{% endfor %}</ul>
             {% endif %}
           </div>
           {% endif %}
         </div>
-
-        <!-- Improvement tips -->
-        {% if confidence_explanation.improvement_tips %}
-        <div class="mt-3 pt-3 border-top">
-          <h3 class="small fw-semibold text-muted mb-2">
-            <i class="bi bi-lightbulb text-warning me-1"></i>How to improve accuracy
-          </h3>
-          <ul class="list-unstyled mb-0">
-            {% for tip in confidence_explanation.improvement_tips %}
-            <li class="small mb-1 text-muted">
-              <i class="bi bi-arrow-right me-1"></i>{{ tip }}
-            </li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
       </div>
     </div>
     {% endif %}
 
-    <!-- Improvement wizard trigger (shown when confidence < 70%) -->
-    {% if result and confidence is not none and confidence < 70 %}
-    <div class="alert alert-info rounded-4 mb-4 d-flex align-items-center gap-3">
-      <i class="bi bi-magic fs-4 text-info flex-shrink-0"></i>
-      <div class="flex-grow-1">
-        <strong>Low confidence detected.</strong>
-        Providing more profile details can significantly improve accuracy.
-      </div>
-      <button class="btn btn-sm btn-outline-info flex-shrink-0" data-bs-toggle="modal" data-bs-target="#improvementWizard">
-        <i class="bi bi-arrow-right me-1"></i>Improve
-      </button>
-    </div>
-
-    <!-- Improvement Wizard Modal -->
-    <div class="modal fade" id="improvementWizard" tabindex="-1" aria-labelledby="wizardLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content rounded-4">
-          <div class="modal-header border-0 pb-0">
-            <h5 class="modal-title" id="wizardLabel">
-              <i class="bi bi-magic me-2 text-info"></i>Confidence Improvement Wizard
-            </h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <p class="text-muted small mb-3">
-              Current confidence: <strong>{{ confidence }}%</strong>.
-              Fill in the fields below to help the model make a more accurate prediction.
-            </p>
-
-            <div class="row g-3" id="wizardFields">
-              {% set missing_fields = [] %}
-              {% for field, ftype in fields %}
-                {% if not form_data.get(field) or form_data.get(field) == '0' %}
-                  {% set _ = missing_fields.append((field, ftype)) %}
-                {% endif %}
-              {% endfor %}
-
-              {% for field, ftype in missing_fields[:8] %}
-              <div class="col-md-6">
-                <label class="form-label small fw-semibold text-capitalize">
-                  {{ field.replace("_", " ") }}
-                </label>
-                {% if ftype == "checkbox" %}
-                <div class="form-check form-switch">
-                  <input class="form-check-input wizard-field" type="checkbox"
-                         name="{{ field }}" id="wiz_{{ field }}">
-                  <label class="form-check-label small" for="wiz_{{ field }}">Yes</label>
-                </div>
-                {% elif ftype == "number" %}
-                <input class="form-control form-control-sm wizard-field" type="number"
-                       step="any" name="{{ field }}" id="wiz_{{ field }}" placeholder="0">
-                {% else %}
-                <input class="form-control form-control-sm wizard-field" type="text"
-                       name="{{ field }}" id="wiz_{{ field }}"
-                       placeholder="{{ field.replace('_', ' ') }}">
-                {% endif %}
-              </div>
-              {% endfor %}
-            </div>
-
-            {% if not missing_fields %}
-            <div class="alert alert-success rounded-3 mb-0">
-              <i class="bi bi-check-circle me-2"></i>
-              All fields are already filled in. The low confidence may be due to ambiguous profile signals.
-            </div>
-            {% endif %}
-          </div>
-          <div class="modal-footer border-0 pt-0">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            {% if missing_fields %}
-            <button type="button" class="btn btn-primary" id="wizardApplyBtn">
-              <i class="bi bi-arrow-clockwise me-1"></i>Re-check with these fields
-            </button>
-            {% endif %}
-          </div>
-        </div>
-      </div>
-    </div>
-    {% endif %}
-
-    <!-- Deep analysis progress panel (hidden initially) -->
-    <div id="deepProgressPanel" class="card shadow-sm rounded-4 mb-4 d-none">
-      <div class="card-body p-4">
-        <h2 class="h6 mb-3"><i class="bi bi-hourglass-split me-2 text-primary"></i>Deep Analysis In Progress</h2>
-        <div id="deepProgressSteps" class="list-group list-group-flush">
-          <div class="list-group-item border-0 ps-0 text-muted small">
-            <span class="spinner-border spinner-border-sm me-2"></span>Initializing...
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Deep analysis result (rendered after JS call) -->
-    <div id="deepResultPanel" class="d-none">
-      <div class="card shadow-sm rounded-4 mb-4" id="deepResultCard">
-        <!-- Filled by JS -->
-      </div>
-    </div>
-
-    <!-- SHAP explanation -->
     {% if shap_chart %}
     <div class="card shadow-sm rounded-4 mb-4">
       <div class="card-body p-4">
-        <h2 class="h6 mb-1">
-          <i class="bi bi-lightbulb text-warning me-2"></i>Why this prediction? (SHAP Explanation)
-        </h2>
-        <p class="small text-muted mb-3">
-          Red bars push toward <strong class="text-danger">Fake</strong>.
-          Green bars push toward <strong class="text-success">Legit</strong>.
-        </p>
-        <img src="{{ url_for('static', filename=shap_chart) }}"
-             class="img-fluid rounded" style="max-height:300px; width:100%; object-fit:contain;">
-      </div>
-    </div>
-    {% elif shap_available %}
-    <div class="alert alert-info rounded-4 mb-4">
-      <i class="bi bi-lightbulb me-2"></i>
-      SHAP explanation will appear here after prediction. Train the model first.
-    </div>
-    {% endif %}
-
-    <!-- Cross-platform results -->
-    {% if cross_platform %}
-    <div class="card shadow-sm rounded-4 mb-4">
-      <div class="card-body p-4">
-        <h2 class="h6 mb-3"><i class="bi bi-diagram-3 me-2 text-info"></i>Cross-Platform Identity Check</h2>
-        <div class="row g-2 mb-3">
-          <div class="col-6 col-md-3 text-center">
-            <div class="h4 mb-0 text-primary">{{ cross_platform.platforms_found_count }}</div>
-            <div class="small text-muted">Platforms Found</div>
-          </div>
-          <div class="col-6 col-md-3 text-center">
-            <div class="h4 mb-0 text-secondary">{{ cross_platform.platforms_checked_count }}</div>
-            <div class="small text-muted">Platforms Checked</div>
-          </div>
-          <div class="col-6 col-md-3 text-center">
-            <div class="h4 mb-0 {% if cross_platform.overall_consistency_score > 0.7 %}text-success{% elif cross_platform.overall_consistency_score > 0.4 %}text-warning{% else %}text-danger{% endif %}">
-              {{ "%.0f"|format(cross_platform.overall_consistency_score * 100) }}%
-            </div>
-            <div class="small text-muted">Consistency Score</div>
-          </div>
-          <div class="col-6 col-md-3 text-center">
-            <div class="h4 mb-0">{{ "%.0f"|format(cross_platform.bio_similarity_score * 100) }}%</div>
-            <div class="small text-muted">Bio Similarity</div>
-          </div>
-        </div>
-        {% if cross_platform.platform_list %}
-        <div class="d-flex flex-wrap gap-2">
-          {% for p in cross_platform.platform_list %}
-          <span class="badge bg-success bg-opacity-15 text-success border border-success"><i class="bi bi-check-circle me-1"></i>{{ p }}</span>
-          {% endfor %}
-        </div>
-        {% endif %}
+        <h2 class="h6 mb-1"><i class="bi bi-lightbulb text-warning me-2"></i>Why this prediction? (SHAP)</h2>
+        <p class="small text-muted mb-3">Red bars push toward <strong class="text-danger">Fake</strong>. Green bars push toward <strong class="text-success">Legit</strong>.</p>
+        <img src="{{ url_for('static', filename=shap_chart) }}" class="img-fluid rounded" style="max-height:300px; width:100%; object-fit:contain;">
       </div>
     </div>
     {% endif %}
 
-    <!-- Photo analysis results -->
     {% if photo_features and photo_features.photo_available %}
     <div class="card shadow-sm rounded-4 mb-4">
       <div class="card-body p-4">
         <h2 class="h6 mb-3"><i class="bi bi-camera me-2 text-secondary"></i>Avatar Analysis</h2>
         <div class="d-flex flex-wrap gap-3">
           {% if photo_features.photo_is_default_avatar is not none %}
-          <div class="text-center">
-            <div class="{% if photo_features.photo_is_default_avatar %}text-warning{% else %}text-success{% endif %}">
-              <i class="bi {% if photo_features.photo_is_default_avatar %}bi-exclamation-circle{% else %}bi-check-circle{% endif %} fs-4"></i>
-            </div>
-            <div class="small text-muted">Default Avatar: {{ "Yes" if photo_features.photo_is_default_avatar else "No" }}</div>
-          </div>
+          <div class="text-center"><div class="{% if photo_features.photo_is_default_avatar %}text-warning{% else %}text-success{% endif %}"><i class="bi {% if photo_features.photo_is_default_avatar %}bi-exclamation-circle{% else %}bi-check-circle{% endif %} fs-4"></i></div><div class="small text-muted">Default Avatar: {{ "Yes" if photo_features.photo_is_default_avatar else "No" }}</div></div>
           {% endif %}
           {% if photo_features.photo_stock_score is not none %}
-          <div class="text-center">
-            <div class="{% if photo_features.photo_stock_score > 0.5 %}text-danger{% elif photo_features.photo_stock_score > 0.2 %}text-warning{% else %}text-success{% endif %}">
-              <i class="bi bi-images fs-4"></i>
-            </div>
-            <div class="small text-muted">Stock Score: {{ "%.0f"|format(photo_features.photo_stock_score * 100) }}%</div>
-          </div>
+          <div class="text-center"><div class="{% if photo_features.photo_stock_score > 0.5 %}text-danger{% elif photo_features.photo_stock_score > 0.2 %}text-warning{% else %}text-success{% endif %}"><i class="bi bi-images fs-4"></i></div><div class="small text-muted">Stock Score: {{ "%.0f"|format(photo_features.photo_stock_score * 100) }}%</div></div>
           {% endif %}
           {% if photo_features.photo_ai_generated_score is not none %}
-          <div class="text-center">
-            <div class="{% if photo_features.photo_ai_generated_score > 0.6 %}text-danger{% elif photo_features.photo_ai_generated_score > 0.3 %}text-warning{% else %}text-success{% endif %}">
-              <i class="bi bi-robot fs-4"></i>
-            </div>
-            <div class="small text-muted">AI-Generated: {{ "%.0f"|format(photo_features.photo_ai_generated_score * 100) }}%</div>
-          </div>
-          {% endif %}
-          {% if photo_features.photo_seen_count is not none and photo_features.photo_seen_count > 1 %}
-          <div class="text-center">
-            <div class="{% if photo_features.photo_seen_count > 3 %}text-danger{% else %}text-warning{% endif %}">
-              <i class="bi bi-exclamation-triangle fs-4"></i>
-            </div>
-            <div class="small text-muted">Seen {{ photo_features.photo_seen_count }}x in DB</div>
-          </div>
+          <div class="text-center"><div class="{% if photo_features.photo_ai_generated_score > 0.6 %}text-danger{% elif photo_features.photo_ai_generated_score > 0.3 %}text-warning{% else %}text-success{% endif %}"><i class="bi bi-robot fs-4"></i></div><div class="small text-muted">AI-Generated: {{ "%.0f"|format(photo_features.photo_ai_generated_score * 100) }}%</div></div>
           {% endif %}
         </div>
       </div>
     </div>
     {% endif %}
 
-    <!-- Username & bio forensic signals -->
     {% if username_features or bio_features %}
     <div class="card shadow-sm rounded-4 mb-4">
       <div class="card-body p-4">
@@ -387,22 +141,9 @@
           <div class="col-md-6">
             <h3 class="h6 text-muted small mb-2">Username</h3>
             <table class="table table-sm table-borderless mb-0">
-              {% if username_features.uname_bot_pattern_count is not none %}
-              <tr><td class="text-muted small">Bot patterns matched</td>
-                  <td class="fw-semibold {% if username_features.uname_bot_pattern_count > 0 %}text-danger{% else %}text-success{% endif %}">{{ username_features.uname_bot_pattern_count }}</td></tr>
-              {% endif %}
-              {% if username_features.uname_entropy is not none %}
-              <tr><td class="text-muted small">Entropy</td>
-                  <td class="fw-semibold">{{ "%.2f"|format(username_features.uname_entropy) }}</td></tr>
-              {% endif %}
-              {% if username_features.uname_dict_coverage is not none %}
-              <tr><td class="text-muted small">Dictionary coverage</td>
-                  <td class="fw-semibold">{{ "%.0f"|format(username_features.uname_dict_coverage * 100) }}%</td></tr>
-              {% endif %}
-              {% if username_features.uname_brand_distance is not none and username_features.uname_brand_distance < 3 %}
-              <tr><td class="text-muted small">Brand similarity</td>
-                  <td class="fw-semibold text-warning">Close to "{{ username_features.uname_brand_closest }}"</td></tr>
-              {% endif %}
+              {% if username_features.uname_bot_pattern_count is not none %}<tr><td class="text-muted small">Bot patterns</td><td class="fw-semibold {% if username_features.uname_bot_pattern_count > 0 %}text-danger{% else %}text-success{% endif %}">{{ username_features.uname_bot_pattern_count }}</td></tr>{% endif %}
+              {% if username_features.uname_entropy is not none %}<tr><td class="text-muted small">Entropy</td><td class="fw-semibold">{{ "%.2f"|format(username_features.uname_entropy) }}</td></tr>{% endif %}
+              {% if username_features.uname_dict_coverage is not none %}<tr><td class="text-muted small">Dictionary coverage</td><td class="fw-semibold">{{ "%.0f"|format(username_features.uname_dict_coverage * 100) }}%</td></tr>{% endif %}
             </table>
           </div>
           {% endif %}
@@ -410,24 +151,9 @@
           <div class="col-md-6">
             <h3 class="h6 text-muted small mb-2">Bio</h3>
             <table class="table table-sm table-borderless mb-0">
-              {% if bio_features.bio_spam_score is not none %}
-              <tr><td class="text-muted small">Spam score</td>
-                  <td class="fw-semibold {% if bio_features.bio_spam_score > 0.3 %}text-danger{% elif bio_features.bio_spam_score > 0.1 %}text-warning{% else %}text-success{% endif %}">
-                    {{ "%.2f"|format(bio_features.bio_spam_score) }}</td></tr>
-              {% endif %}
-              {% if bio_features.bio_template_similarity is not none %}
-              <tr><td class="text-muted small">Template similarity</td>
-                  <td class="fw-semibold {% if bio_features.bio_template_similarity > 0.5 %}text-danger{% else %}text-muted{% endif %}">
-                    {{ "%.0f"|format(bio_features.bio_template_similarity * 100) }}%</td></tr>
-              {% endif %}
-              {% if bio_features.bio_emoji_count is not none %}
-              <tr><td class="text-muted small">Emoji count</td>
-                  <td class="fw-semibold">{{ bio_features.bio_emoji_count }}</td></tr>
-              {% endif %}
-              {% if bio_features.bio_phone_present %}
-              <tr><td class="text-muted small">Phone detected</td>
-                  <td class="fw-semibold text-warning">Yes</td></tr>
-              {% endif %}
+              {% if bio_features.bio_spam_score is not none %}<tr><td class="text-muted small">Spam score</td><td class="fw-semibold {% if bio_features.bio_spam_score > 0.3 %}text-danger{% elif bio_features.bio_spam_score > 0.1 %}text-warning{% else %}text-success{% endif %}">{{ "%.2f"|format(bio_features.bio_spam_score) }}</td></tr>{% endif %}
+              {% if bio_features.bio_template_similarity is not none %}<tr><td class="text-muted small">Template similarity</td><td class="fw-semibold {% if bio_features.bio_template_similarity > 0.5 %}text-danger{% else %}text-muted{% endif %}">{{ "%.0f"|format(bio_features.bio_template_similarity * 100) }}%</td></tr>{% endif %}
+              {% if bio_features.bio_emoji_count is not none %}<tr><td class="text-muted small">Emoji count</td><td class="fw-semibold">{{ bio_features.bio_emoji_count }}</td></tr>{% endif %}
             </table>
           </div>
           {% endif %}
@@ -435,308 +161,1001 @@
       </div>
     </div>
     {% endif %}
-
     {% endif %}{# end if result #}
 
-    <!-- Form card -->
-    <div class="card shadow-sm rounded-4">
-      <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h1 class="h5 mb-0 text-capitalize">
-            <i class="bi bi-person-search me-2"></i>{{ platform }} — Single Profile Check
-          </h1>
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
-        </div>
-
-        <p class="text-muted small mb-3">
-          Enter profile details manually{% if live_lookup %} or use <strong>Live Lookup</strong> to auto-fill from the API{% endif %}.
-          A trained model must exist for this platform.
-        </p>
-
-        <!-- Live lookup -->
-        {% if live_lookup %}
-        <div class="card bg-info bg-opacity-10 border-info rounded-4 mb-3">
-          <div class="card-body p-3">
-            <div class="fw-semibold small mb-2">
-              <i class="bi bi-wifi me-1 text-info"></i>Live Profile Lookup
-              {% if not api_key_configured %}
-              <span class="badge bg-warning text-dark ms-1">
-                <i class="bi bi-exclamation-triangle me-1"></i>API key not configured
-              </span>
-              {% endif %}
-            </div>
-            <div class="input-group input-group-sm">
-              <input type="text" id="lookupInput" class="form-control rounded-start"
-                     placeholder="Enter {{ platform }} username..." />
-              <button class="btn btn-info text-white" id="lookupBtn" type="button"
-                      {% if not api_key_configured and platform not in ['github','reddit'] %}
-                      title="Configure API key in Admin → API Keys"{% endif %}>
-                <i class="bi bi-search me-1"></i>Fetch Profile
-              </button>
-            </div>
-            <div id="lookupStatus" class="small mt-2 text-muted d-none"></div>
-            <div id="fieldsFilledBadge" class="mt-1 d-none">
-              <span class="badge bg-success" id="fieldsFilledCount"></span>
-            </div>
+    <!-- ============================================================ -->
+    <!-- Sticky data coverage indicator                              -->
+    <!-- ============================================================ -->
+    <div id="coverageIndicator" class="card shadow-sm rounded-4 mb-3 sticky-top" style="top:1rem; z-index:10;">
+      <div class="card-body p-3 d-flex align-items-center gap-3 flex-wrap">
+        <div class="flex-grow-1" style="min-width:220px;">
+          <div class="d-flex justify-content-between small mb-1">
+            <span class="fw-semibold"><i class="bi bi-clipboard-data me-1"></i>Data Coverage</span>
+            <span class="text-muted"><span id="coverageFilled">0</span> / <span id="coverageTotal">0</span> fields (<span id="coveragePct">0</span>%)</span>
+          </div>
+          <div class="progress" style="height:8px;border-radius:4px;">
+            <div id="coverageBar" class="progress-bar bg-warning" style="width:0%"></div>
+          </div>
+          <div class="small text-muted mt-1">
+            Estimated confidence: <strong id="coverageConfidence">~50%</strong>
+            <span id="coverageHint">— fill more for higher accuracy</span>
           </div>
         </div>
-        {% endif %}
-
-        <form method="POST" id="predictForm">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-
-          <div class="row g-3">
-            {% for field, ftype in fields %}
-            <div class="col-md-6">
-              <label class="form-label fw-semibold text-capitalize d-flex align-items-center gap-1">
-                {{ field.replace("_", " ") }}
-                {% set desc = feature_descriptions.get(field) %}
-                {% if desc %}
-                <i class="bi bi-question-circle text-muted small"
-                   data-bs-toggle="tooltip"
-                   title="{{ desc }}"></i>
-                {% endif %}
-              </label>
-              {% if ftype == "checkbox" %}
-                <div class="form-check form-switch mt-1">
-                  <input class="form-check-input" type="checkbox" name="{{ field }}" id="{{ field }}"
-                    {% if form_data.get(field) %}checked{% endif %}>
-                  <label class="form-check-label" for="{{ field }}">Yes</label>
-                </div>
-              {% elif ftype == "number" %}
-                <input class="form-control" type="number" step="any" name="{{ field }}"
-                       id="f_{{ field }}"
-                       value="{{ form_data.get(field, '') }}"
-                       placeholder="0">
-              {% else %}
-                <input class="form-control" type="text" name="{{ field }}"
-                       id="f_{{ field }}"
-                       value="{{ form_data.get(field, '') }}"
-                       placeholder="{{ field.replace('_', ' ') }}">
-              {% endif %}
-            </div>
-            {% endfor %}
-          </div>
-
-          <div class="d-flex gap-2 mt-4">
-            <button class="btn btn-primary px-4" type="submit">
-              <i class="bi bi-search me-2"></i>Check Profile
-            </button>
-            <button class="btn btn-outline-secondary" type="reset">Reset</button>
-          </div>
-        </form>
       </div>
     </div>
 
+    <!-- ============================================================ -->
+    <!-- Platform selector                                           -->
+    <!-- ============================================================ -->
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body p-3">
+        <div class="small text-muted mb-2">Switch platform:</div>
+        <div class="d-flex flex-wrap gap-1">
+          {% for p in ["instagram","facebook","x","linkedin","github","youtube","tiktok","reddit","discord","snapchat"] %}
+          <a href="{{ url_for('manual_predict', platform=p) }}"
+             class="btn btn-sm {% if p == platform %}btn-primary{% else %}btn-outline-secondary{% endif %} text-capitalize">
+            {{ p }}
+          </a>
+          {% endfor %}
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- Live Lookup (preserved)                                     -->
+    <!-- ============================================================ -->
+    {% if live_lookup %}
+    <div class="card bg-info bg-opacity-10 border-info rounded-4 mb-3">
+      <div class="card-body p-3">
+        <div class="fw-semibold small mb-2">
+          <i class="bi bi-wifi me-1 text-info"></i>Live Profile Lookup
+          {% if not api_key_configured %}
+          <span class="badge bg-warning text-dark ms-1"><i class="bi bi-exclamation-triangle me-1"></i>API key not configured</span>
+          {% endif %}
+        </div>
+        <div class="input-group input-group-sm">
+          <input type="text" id="lookupInput" class="form-control rounded-start"
+                 placeholder="Enter {{ platform }} username..." />
+          <button class="btn btn-info text-white" id="lookupBtn" type="button">
+            <i class="bi bi-search me-1"></i>Fetch & Auto-Fill
+          </button>
+        </div>
+        <div id="lookupStatus" class="small mt-2 text-muted d-none"></div>
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ============================================================ -->
+    <!-- Quick fill toolbar                                          -->
+    <!-- ============================================================ -->
+    <div class="card shadow-sm rounded-4 mb-3">
+      <div class="card-body p-3 d-flex flex-wrap gap-2 align-items-center">
+        <span class="small text-muted me-2"><i class="bi bi-lightning-charge me-1"></i>Demo:</span>
+        <button type="button" class="btn btn-sm btn-outline-success" id="quickFillLegitBtn">Quick Fill: Test Legit Profile</button>
+        <button type="button" class="btn btn-sm btn-outline-danger" id="quickFillFakeBtn">Quick Fill: Test Fake Profile</button>
+        <button type="button" class="btn btn-sm btn-outline-secondary" id="resetFormBtn">Reset Form</button>
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- The form                                                    -->
+    <!-- ============================================================ -->
+    <form method="POST" id="predictForm" enctype="multipart/form-data" data-platform="{{ platform }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+      <!-- Hidden fields for AJAX-computed feature dicts -->
+      <input type="hidden" name="photo_features_json"    id="photo-features-json"    value="">
+      <input type="hidden" name="username_features_json" id="username-features-json" value="">
+      <input type="hidden" name="bio_features_json"      id="bio-features-json"      value="">
+      <input type="hidden" name="posts_features_json"    id="posts-features-json"    value="">
+
+      <div class="accordion mb-3" id="formAccordion">
+
+        {# ==================================================== #}
+        {# Section 1 — REQUIRED — always visible              #}
+        {# ==================================================== #}
+        <div class="accordion-item rounded-4 mb-2 overflow-hidden">
+          <h2 class="accordion-header">
+            <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#sec1" aria-expanded="true">
+              <span class="me-auto"><i class="bi bi-1-circle me-2"></i><strong>Basic Profile Info</strong></span>
+              <span class="badge bg-danger me-3">Required</span>
+            </button>
+          </h2>
+          <div id="sec1" class="accordion-collapse collapse show">
+            <div class="accordion-body">
+              <div class="row g-3">
+
+                {# --- Username / Name / Channel name (platform-specific) --- #}
+                {% if platform in ["instagram","x","github","tiktok","reddit","snapchat","discord"] %}
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold">Username</label>
+                  <input class="form-control" type="text" name="username" id="f_username"
+                         data-required="1" placeholder="{{ platform }} handle">
+                  <div id="username-analysis-result" class="analysis-inline mt-2" style="display:none;"></div>
+                </div>
+                {% endif %}
+                {% if platform in ["facebook","linkedin"] %}
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold">Full Name</label>
+                  <input class="form-control" type="text" name="name" id="f_name" data-required="1" placeholder="Full name on profile">
+                  <div id="username-analysis-result" class="analysis-inline mt-2" style="display:none;"></div>
+                </div>
+                {% endif %}
+                {% if platform == "youtube" %}
+                <div class="col-md-6">
+                  <label class="form-label fw-semibold">Channel Name</label>
+                  <input class="form-control" type="text" name="channel_name" id="f_channel_name" data-required="1" placeholder="YouTube channel name">
+                  <div id="username-analysis-result" class="analysis-inline mt-2" style="display:none;"></div>
+                </div>
+                {% endif %}
+
+                {# --- Followers / Friends / Subscribers / Karma --- #}
+                {% if platform in ["instagram","facebook","x","tiktok","linkedin"] %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Followers</label>
+                  <input class="form-control" type="number" name="followers" id="f_followers" data-required="1" min="0" placeholder="0"></div>
+                {% endif %}
+                {% if platform == "facebook" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Friends</label>
+                  <input class="form-control" type="number" name="friends" id="f_friends" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "youtube" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Subscribers</label>
+                  <input class="form-control" type="number" name="subscribers" id="f_subscribers" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "github" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Followers</label>
+                  <input class="form-control" type="number" name="followers" id="f_followers" data-required="1" min="0"></div>
+                {% endif %}
+
+                {# --- Following --- #}
+                {% if platform in ["instagram","x","github","tiktok"] %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Following</label>
+                  <input class="form-control" type="number" name="following" id="f_following" data-required="1" min="0"></div>
+                {% endif %}
+
+                {# --- LinkedIn connections (bucketed) --- #}
+                {% if platform == "linkedin" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Connections</label>
+                  <select class="form-select" name="connections" id="f_connections" data-required="1">
+                    <option value="">Select…</option>
+                    <option value="< 50">&lt; 50</option>
+                    <option value="50-150">50-150</option>
+                    <option value="150-500">150-500</option>
+                    <option value="500+">500+</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {# --- Posts / Tweets / Videos / Karma fields --- #}
+                {% if platform == "instagram" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Posts</label>
+                  <input class="form-control" type="number" name="posts" id="f_posts" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "facebook" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Posts</label>
+                  <input class="form-control" type="number" name="posts" id="f_posts" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "x" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Tweets</label>
+                  <input class="form-control" type="number" name="tweets" id="f_tweets" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "github" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Public Repos</label>
+                  <input class="form-control" type="number" name="public_repos" id="f_public_repos" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "youtube" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Total Videos</label>
+                  <input class="form-control" type="number" name="total_videos" id="f_total_videos" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "tiktok" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Total Videos</label>
+                  <input class="form-control" type="number" name="total_videos" id="f_total_videos" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "reddit" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Post Karma</label>
+                  <input class="form-control" type="number" name="post_karma" id="f_post_karma" data-required="1"></div>
+                <div class="col-md-6"><label class="form-label fw-semibold">Comment Karma</label>
+                  <input class="form-control" type="number" name="comment_karma" id="f_comment_karma" data-required="1"></div>
+                {% endif %}
+                {% if platform == "snapchat" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Snap Score</label>
+                  <input class="form-control" type="number" name="snap_score" id="f_snap_score" data-required="1" min="0"></div>
+                {% endif %}
+                {% if platform == "discord" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">User ID</label>
+                  <input class="form-control" type="text" name="user_id" id="f_user_id" placeholder="18-digit Discord ID"></div>
+                <div class="col-md-6"><label class="form-label fw-semibold">Account Age (days)</label>
+                  <input class="form-control" type="number" name="account_age_days" id="f_account_age_days" data-required="1" min="0"></div>
+                {% endif %}
+
+                {# --- LinkedIn additional required --- #}
+                {% if platform == "linkedin" %}
+                <div class="col-md-6"><label class="form-label fw-semibold">Followers (if visible)</label>
+                  <input class="form-control" type="number" name="followers" id="f_followers" min="0"></div>
+                <div class="col-md-12"><label class="form-label fw-semibold">Headline</label>
+                  <input class="form-control" type="text" name="headline" id="f_headline" data-required="1" placeholder="Professional headline"></div>
+                {% endif %}
+
+                {# --- Bio / About / Description --- #}
+                {% set bio_field = "bio" %}
+                {% if platform in ["youtube","reddit"] %}{% set bio_field = "about" %}{% endif %}
+                {% if platform == "linkedin" %}{% set bio_field = "about" %}{% endif %}
+                <div class="col-12">
+                  <label class="form-label fw-semibold">{% if bio_field == "about" %}About{% else %}Bio{% endif %}</label>
+                  <textarea class="form-control" name="{{ bio_field }}" id="f_bio" data-required="1" rows="2" placeholder="Profile description text"></textarea>
+                  <div id="bio-analysis-result" class="analysis-inline mt-2" style="display:none;"></div>
+                </div>
+
+                {# --- Verified --- #}
+                {% if platform in ["instagram","facebook","x","tiktok"] %}
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="verified" id="f_verified">
+                    <label class="form-check-label" for="f_verified">Verified (blue checkmark)</label>
+                  </div>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ==================================================== #}
+        {# Section 2 — Account Details                         #}
+        {# ==================================================== #}
+        <div class="accordion-item rounded-4 mb-2 overflow-hidden">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sec2">
+              <span class="me-auto"><i class="bi bi-2-circle me-2"></i><strong>Account Details</strong></span>
+              <span class="badge bg-secondary me-3">Optional — improves accuracy</span>
+            </button>
+          </h2>
+          <div id="sec2" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="row g-3">
+
+                {% if platform in ["instagram","facebook","x","github","youtube","tiktok","discord"] %}
+                <div class="col-md-6"><label class="form-label small">Creation Date</label>
+                  <input class="form-control" type="date" name="creation_date" id="f_creation_date"></div>
+                <div class="col-md-6"><label class="form-label small">Or Account Age (days)</label>
+                  <input class="form-control" type="number" name="account_age_days" id="f_account_age_days" min="0"></div>
+                {% endif %}
+                {% if platform == "reddit" %}
+                <div class="col-md-6"><label class="form-label small">Cake Day</label>
+                  <input class="form-control" type="date" name="cake_day" id="f_cake_day"></div>
+                <div class="col-md-6"><label class="form-label small">Or Account Age (days)</label>
+                  <input class="form-control" type="number" name="account_age_days" id="f_account_age_days" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Trophies</label>
+                  <input class="form-control" type="number" name="trophy_count" id="f_trophy_count" min="0"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch mt-4">
+                    <input class="form-check-input" type="checkbox" name="has_premium" id="f_has_premium">
+                    <label class="form-check-label small" for="f_has_premium">Reddit Premium</label>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="has_custom_avatar" id="f_has_custom_avatar">
+                    <label class="form-check-label small" for="f_has_custom_avatar">Custom avatar</label>
+                  </div>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="has_custom_banner" id="f_has_custom_banner">
+                    <label class="form-check-label small" for="f_has_custom_banner">Custom banner</label>
+                  </div>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Display Name</label>
+                  <input class="form-control" type="text" name="display_name" id="f_display_name"></div>
+                {% endif %}
+                {% if platform == "snapchat" %}
+                <div class="col-md-6"><label class="form-label small">Display Name</label>
+                  <input class="form-control" type="text" name="display_name"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch mt-4">
+                    <input class="form-check-input" type="checkbox" name="has_bitmoji">
+                    <label class="form-check-label small">Custom Bitmoji avatar</label>
+                  </div>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Approx. Creation Date</label>
+                  <input class="form-control" type="date" name="creation_date"></div>
+                <div class="col-md-6"><label class="form-label small">Or Account Age (days)</label>
+                  <input class="form-control" type="number" name="account_age_days" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Snap Map Location</label>
+                  <input class="form-control" type="text" name="snap_map_location"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch mt-4">
+                    <input class="form-check-input" type="checkbox" name="is_public">
+                    <label class="form-check-label small">Public profile</label>
+                  </div>
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="has_public_story">
+                    <label class="form-check-label small">Public story</label>
+                  </div>
+                </div>
+                {% endif %}
+
+                {# --- Instagram-specific --- #}
+                {% if platform == "instagram" %}
+                <div class="col-md-6">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_private" id="f_is_private"><label class="form-check-label small" for="f_is_private">Private profile</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_business" id="f_is_business"><label class="form-check-label small" for="f_is_business">Business / creator account</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_highlights" id="f_has_highlights"><label class="form-check-label small" for="f_has_highlights">Has story highlights</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_active_story" id="f_has_active_story"><label class="form-check-label small" for="f_has_active_story">Has an active story</label></div>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Display Name</label>
+                  <input class="form-control" type="text" name="display_name" id="f_display_name">
+                  <label class="form-label small mt-2">Location</label>
+                  <input class="form-control" type="text" name="location" id="f_location">
+                  <label class="form-label small mt-2">Website URL</label>
+                  <input class="form-control" type="text" name="website_url" id="f_website_url">
+                  <label class="form-label small mt-2">Profile Category</label>
+                  <input class="form-control" type="text" name="profile_category" id="f_profile_category" placeholder="e.g. Digital Creator">
+                </div>
+                {% endif %}
+
+                {# --- Facebook-specific --- #}
+                {% if platform == "facebook" %}
+                <div class="col-md-6"><label class="form-label small">Location / Hometown</label><input class="form-control" type="text" name="location"></div>
+                <div class="col-md-6"><label class="form-label small">Workplace</label><input class="form-control" type="text" name="workplace"></div>
+                <div class="col-md-6"><label class="form-label small">Education</label><input class="form-control" type="text" name="education"></div>
+                <div class="col-md-6"><label class="form-label small">Custom URL Slug</label><input class="form-control" type="text" name="profile_url_slug" placeholder="facebook.com/your.name"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="relationship_listed"><label class="form-check-label small">Relationship status filled</label></div>
+                </div>
+                {% endif %}
+
+                {# --- X-specific --- #}
+                {% if platform == "x" %}
+                <div class="col-md-6"><label class="form-label small">Display Name</label><input class="form-control" type="text" name="display_name"></div>
+                <div class="col-md-6"><label class="form-label small">Location</label><input class="form-control" type="text" name="location"></div>
+                <div class="col-md-6"><label class="form-label small">Website URL</label><input class="form-control" type="text" name="website_url"></div>
+                <div class="col-md-6"><label class="form-label small">Listed Count</label><input class="form-control" type="number" name="listed_count" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Tweet Source / Client</label>
+                  <select class="form-select" name="tweet_source">
+                    <option value="">Unknown</option>
+                    <option>Twitter Web App</option>
+                    <option>iPhone</option>
+                    <option>Android</option>
+                    <option>Third-party/Bot tool</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="default_header"><label class="form-check-label small">Default header / banner</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_protected"><label class="form-check-label small">Protected (private) tweets</label></div>
+                </div>
+                {% endif %}
+
+                {# --- LinkedIn-specific (covered in completeness section) --- #}
+                {% if platform == "linkedin" %}
+                <div class="col-md-4"><label class="form-label small">Work Experiences</label><input class="form-control" type="number" name="work_experiences" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Education Entries</label><input class="form-control" type="number" name="education_count" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Skills Listed</label><input class="form-control" type="number" name="skills_count" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Endorsements</label><input class="form-control" type="number" name="endorsement_count" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Recommendations</label><input class="form-control" type="number" name="recommendations" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Certifications</label><input class="form-control" type="number" name="certifications" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Volunteer Entries</label><input class="form-control" type="number" name="volunteer_count" min="0"></div>
+                <div class="col-md-8 d-flex gap-3 align-items-end flex-wrap">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_summary"><label class="form-check-label small">Has About</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_photo"><label class="form-check-label small">Has photo</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_banner"><label class="form-check-label small">Has banner</label></div>
+                </div>
+                {% endif %}
+
+                {# --- GitHub-specific --- #}
+                {% if platform == "github" %}
+                <div class="col-md-6"><label class="form-label small">Display Name</label><input class="form-control" type="text" name="display_name" id="f_display_name"></div>
+                <div class="col-md-6"><label class="form-label small">Location</label><input class="form-control" type="text" name="location" id="f_location"></div>
+                <div class="col-md-6"><label class="form-label small">Website URL</label><input class="form-control" type="text" name="website_url" id="f_website_url"></div>
+                <div class="col-md-6"><label class="form-label small">Company</label><input class="form-control" type="text" name="company" id="f_company"></div>
+                <div class="col-md-6"><label class="form-label small">Public Gists</label><input class="form-control" type="number" name="public_gists" id="f_public_gists" min="0"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" name="is_hireable" id="f_is_hireable"><label class="form-check-label small" for="f_is_hireable">Hireable flag set</label></div>
+                </div>
+                {% endif %}
+
+                {# --- YouTube-specific --- #}
+                {% if platform == "youtube" %}
+                <div class="col-md-6"><label class="form-label small">Total Views</label><input class="form-control" type="number" name="total_views" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Country</label><input class="form-control" type="text" name="country"></div>
+                <div class="col-md-6"><label class="form-label small">Channel Handle (@)</label><input class="form-control" type="text" name="channel_handle"></div>
+                <div class="col-md-6"><label class="form-label small">Channel Type</label>
+                  <select class="form-select" name="channel_type">
+                    <option value="">Unknown</option><option>Personal</option><option>Brand</option><option>Music</option><option>Education</option><option>News</option><option>Other</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_verified"><label class="form-check-label small">Verified</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="comments_enabled" checked><label class="form-check-label small">Comments enabled</label></div>
+                </div>
+                {% endif %}
+
+                {# --- TikTok-specific --- #}
+                {% if platform == "tiktok" %}
+                <div class="col-md-6"><label class="form-label small">Display Name</label><input class="form-control" type="text" name="display_name"></div>
+                <div class="col-md-6"><label class="form-label small">Total Likes (hearts)</label><input class="form-control" type="number" name="total_likes" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Website URL</label><input class="form-control" type="text" name="website_url"></div>
+                <div class="col-md-6"><label class="form-label small">Category / Niche</label><input class="form-control" type="text" name="category"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="is_private"><label class="form-check-label small">Private account</label></div>
+                </div>
+                {% endif %}
+
+                {# --- Discord-specific extras --- #}
+                {% if platform == "discord" %}
+                <div class="col-md-6"><label class="form-label small">Display Name</label><input class="form-control" type="text" name="display_name"></div>
+                <div class="col-md-6"><label class="form-label small">Custom Status</label><input class="form-control" type="text" name="custom_status"></div>
+                <div class="col-md-6"><label class="form-label small">Pronouns</label><input class="form-control" type="text" name="pronouns"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_custom_avatar"><label class="form-check-label small">Custom avatar</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_banner"><label class="form-check-label small">Profile banner</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_nitro"><label class="form-check-label small">Nitro subscriber</label></div>
+                </div>
+                {% endif %}
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ==================================================== #}
+        {# Section 3 — Profile Picture Analysis                #}
+        {# ==================================================== #}
+        <div class="accordion-item rounded-4 mb-2 overflow-hidden">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sec3">
+              <span class="me-auto"><i class="bi bi-3-circle me-2"></i><strong>Profile Picture Analysis</strong></span>
+              <span class="badge bg-success me-3">High Impact</span>
+            </button>
+          </h2>
+          <div id="sec3" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label small">Upload avatar (JPG/PNG/WEBP, max 5 MB)</label>
+                  <input class="form-control" type="file" name="avatar_file" id="f_avatar_file"
+                         accept="image/jpeg,image/png,image/gif,image/webp">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Or paste avatar URL</label>
+                  <input class="form-control" type="text" name="avatar_url" id="f_avatar_url" placeholder="https://...">
+                </div>
+                {% if platform != "github" and platform != "linkedin" %}
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="has_custom_avatar" id="f_has_custom_avatar_main">
+                    <label class="form-check-label small" for="f_has_custom_avatar_main">Has a custom (non-default) avatar</label>
+                  </div>
+                  {% if platform == "facebook" %}
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="has_cover_photo">
+                    <label class="form-check-label small">Has custom cover photo</label>
+                  </div>
+                  {% endif %}
+                  {% if platform == "youtube" %}
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="has_custom_banner">
+                    <label class="form-check-label small">Has custom banner</label>
+                  </div>
+                  {% endif %}
+                </div>
+                {% endif %}
+                {% if platform == "github" %}
+                <div class="col-md-6">
+                  <div class="form-check form-switch">
+                    <input class="form-check-input" type="checkbox" name="uses_identicon" id="f_uses_identicon">
+                    <label class="form-check-label small" for="f_uses_identicon">Still using GitHub auto-identicon</label>
+                  </div>
+                </div>
+                {% endif %}
+                <div class="col-12">
+                  <div id="photo-analysis-result" class="analysis-inline" style="display:none;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ==================================================== #}
+        {# Section 4 — Activity & Behavior                     #}
+        {# ==================================================== #}
+        <div class="accordion-item rounded-4 mb-2 overflow-hidden">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sec4">
+              <span class="me-auto"><i class="bi bi-4-circle me-2"></i><strong>Activity & Behavior</strong></span>
+              <span class="badge bg-secondary me-3">Optional — improves accuracy</span>
+            </button>
+          </h2>
+          <div id="sec4" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="row g-3">
+
+                {% if platform in ["instagram","facebook","x","tiktok","reddit"] %}
+                <div class="col-md-6">
+                  <label class="form-label small">Avg Posts per Day</label>
+                  <input class="form-control" type="number" step="any" name="avg_posts_per_day" min="0">
+                </div>
+                {% endif %}
+                {% if platform == "x" %}
+                <div class="col-md-6">
+                  <label class="form-label small">Avg Tweets per Day</label>
+                  <input class="form-control" type="number" step="any" name="avg_tweets_per_day" min="0">
+                </div>
+                {% endif %}
+                {% if platform == "reddit" %}
+                <div class="col-md-6">
+                  <label class="form-label small">Avg Comments per Day</label>
+                  <input class="form-control" type="number" step="any" name="avg_comments_per_day" min="0">
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Subreddits Active In</label>
+                  <input class="form-control" type="number" name="subreddits_active" min="0">
+                </div>
+                {% endif %}
+
+                {# --- Posting pattern --- #}
+                {% if platform in ["instagram","facebook","x","tiktok","reddit","discord"] %}
+                <div class="col-md-6">
+                  <label class="form-label small">Posting Pattern</label>
+                  <select class="form-select" name="posting_pattern">
+                    <option value="">Unknown</option>
+                    <option>Regular/Scheduled</option>
+                    <option>Irregular/Random</option>
+                    <option>Burst (many then silence)</option>
+                    <option>Very Infrequent</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {# --- Active time --- #}
+                {% if platform in ["instagram","x"] %}
+                <div class="col-md-6">
+                  <label class="form-label small">Active Time (multi-select)</label>
+                  <select class="form-select" name="active_time" multiple size="3">
+                    <option>Morning</option><option>Afternoon</option><option>Evening</option><option>Night</option><option>All Day</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {# --- Content types --- #}
+                <div class="col-md-6">
+                  <label class="form-label small">Content Types (multi-select)</label>
+                  <select class="form-select" name="content_types" multiple size="4">
+                    {% if platform == "instagram" %}
+                      <option>Original Posts</option><option>Reposts</option><option>Stories</option><option>Reels</option><option>Links/URLs</option>
+                    {% elif platform == "facebook" %}
+                      <option>Original</option><option>Shared posts</option><option>Check-ins</option><option>Photos</option><option>Videos</option><option>Links</option>
+                    {% elif platform == "x" %}
+                      <option>Original tweets</option><option>Retweets</option><option>Replies</option><option>Quote tweets</option><option>Threads</option><option>Links</option>
+                    {% elif platform == "linkedin" %}
+                      <option>Original posts</option><option>Shared articles</option><option>Job updates</option><option>Celebrations</option><option>Polls</option>
+                    {% elif platform == "youtube" %}
+                      <option>Original</option><option>Compilations</option><option>Reposts</option><option>Shorts</option><option>Livestreams</option>
+                    {% elif platform == "tiktok" %}
+                      <option>Original</option><option>Duets</option><option>Stitches</option><option>Reposts</option><option>Sound trends</option>
+                    {% elif platform == "reddit" %}
+                      <option>Text posts</option><option>Links</option><option>Images</option><option>Comments only</option><option>Cross-posts</option>
+                    {% elif platform == "discord" %}
+                      <option>Text messages</option><option>Images</option><option>Links</option><option>Embeds</option><option>Bot commands</option><option>Stickers</option>
+                    {% elif platform == "snapchat" %}
+                      <option>Personal snaps</option><option>Promotions</option><option>Links</option><option>Random content</option>
+                    {% endif %}
+                  </select>
+                </div>
+
+                {# --- Topics --- #}
+                <div class="col-md-6">
+                  <label class="form-label small">Primary Topics (multi-select)</label>
+                  <select class="form-select" name="topics" multiple size="5">
+                    <option>Crypto/Finance</option>
+                    <option>Promotions/Ads</option>
+                    {% if platform in ["instagram","tiktok"] %}<option>Lifestyle</option><option>Beauty</option><option>Travel</option><option>Food</option>{% endif %}
+                    {% if platform == "youtube" %}<option>Gaming</option><option>Music</option><option>Education</option><option>Vlogs</option>{% endif %}
+                    {% if platform == "tiktok" %}<option>Dance</option><option>Comedy</option>{% endif %}
+                    {% if platform in ["facebook","x"] %}<option>Politics</option><option>Sports</option>{% endif %}
+                    {% if platform == "x" %}<option>News</option>{% endif %}
+                    {% if platform == "reddit" %}<option>Gaming</option><option>Advice</option><option>Memes</option>{% endif %}
+                    <option>Tech</option>
+                    <option>Personal/Mixed</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+
+                {# --- Engagement level --- #}
+                <div class="col-md-6">
+                  <label class="form-label small">{% if platform == "reddit" %}Engagement Received{% else %}Engagement Level{% endif %}</label>
+                  <select class="form-select" name="{% if platform == 'reddit' %}engagement_received{% else %}engagement_level{% endif %}">
+                    <option value="">Unknown</option>
+                    {% if platform == "reddit" %}
+                    <option>High upvotes</option><option>Medium</option><option>Low</option><option>Mostly downvoted</option>
+                    {% else %}
+                    <option>High</option><option>Medium</option><option>Low</option><option>Zero</option>
+                    {% endif %}
+                  </select>
+                </div>
+
+                {# --- Caption / Tweet / Comment length --- #}
+                {% if platform in ["instagram","tiktok"] %}
+                <div class="col-md-6">
+                  <label class="form-label small">Caption Length</label>
+                  <select class="form-select" name="caption_length">
+                    <option value="">Unknown</option><option>Very Short (1-2 words)</option><option>Short</option><option>Medium</option><option>Long</option><option>Mixed</option>
+                  </select>
+                </div>
+                {% endif %}
+                {% if platform == "x" %}
+                <div class="col-md-6">
+                  <label class="form-label small">Tweet Length</label>
+                  <select class="form-select" name="tweet_length">
+                    <option value="">Unknown</option><option>Very short</option><option>Short</option><option>Medium</option><option>Long (near 280)</option><option>Mixed</option>
+                  </select>
+                </div>
+                {% endif %}
+                {% if platform == "reddit" %}
+                <div class="col-md-6">
+                  <label class="form-label small">Comment Length</label>
+                  <select class="form-select" name="comment_length">
+                    <option value="">Unknown</option><option>Very short (1-2 words)</option><option>Short</option><option>Medium</option><option>Long</option><option>Mixed</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <label class="form-label small">Controversial Ratio</label>
+                  <select class="form-select" name="controversial_ratio">
+                    <option value="">Unknown</option><option>None</option><option>Few</option><option>Many</option><option>Mostly controversial</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {# --- LinkedIn-specific activity --- #}
+                {% if platform == "linkedin" %}
+                <div class="col-md-6"><label class="form-label small">Posts/Articles Published</label><input class="form-control" type="number" name="post_count" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Posting Frequency</label>
+                  <select class="form-select" name="posting_frequency">
+                    <option value="">Unknown</option><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Rarely</option><option>Never</option>
+                  </select>
+                </div>
+                <div class="col-md-12"><label class="form-label small">Headline Buzzwords</label>
+                  <input class="form-control" type="text" name="headline_buzzwords" placeholder="guru, ninja, visionary, rockstar...">
+                </div>
+                {% endif %}
+
+                {# --- GitHub activity --- #}
+                {% if platform == "github" %}
+                <div class="col-md-4"><label class="form-label small">Total Stars Received</label><input class="form-control" type="number" name="total_stars" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Forked Repos</label><input class="form-control" type="number" name="forked_repos" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Top Language</label><input class="form-control" type="text" name="top_language"></div>
+                <div class="col-md-4"><label class="form-label small">Unique Languages</label><input class="form-control" type="number" name="unique_languages" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Contributions (1y)</label><input class="form-control" type="number" name="contributions_year" min="0"></div>
+                <div class="col-md-4"><label class="form-label small">Issues/PRs Opened</label><input class="form-control" type="number" name="issues_prs_opened" min="0"></div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_readme_profile"><label class="form-check-label small">Profile README</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="has_pinned_repos"><label class="form-check-label small">Pinned repos</label></div>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Avg README Quality</label>
+                  <select class="form-select" name="avg_readme_quality"><option value="">Unknown</option><option>None</option><option>Short</option><option>Detailed</option><option>Very detailed</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Commit Frequency</label>
+                  <select class="form-select" name="commit_frequency"><option value="">Unknown</option><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Sporadic</option><option>None</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Last Activity</label>
+                  <select class="form-select" name="last_activity"><option value="">Unknown</option><option>Today</option><option>This week</option><option>This month</option><option>Months ago</option><option>Years ago</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Contribution Pattern</label>
+                  <select class="form-select" name="contribution_pattern"><option value="">Unknown</option><option>Consistent year-round</option><option>Bursts then silence</option><option>Weekdays only</option></select>
+                </div>
+                {% endif %}
+
+                {# --- YouTube activity --- #}
+                {% if platform == "youtube" %}
+                <div class="col-md-6"><label class="form-label small">Avg Views per Video</label><input class="form-control" type="number" name="avg_views" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Featured Channels</label><input class="form-control" type="number" name="featured_channels" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Upload Frequency</label>
+                  <select class="form-select" name="upload_frequency"><option value="">Unknown</option><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Sporadic</option><option>Inactive</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Upload Regularity</label>
+                  <select class="form-select" name="upload_regularity"><option value="">Unknown</option><option>Very consistent schedule</option><option>Somewhat regular</option><option>Random</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Avg Video Length</label>
+                  <select class="form-select" name="avg_video_length">
+                    <option value="">Unknown</option>
+                    <option>&lt; 1 min (Shorts)</option><option>1-5 min</option><option>5-15 min</option><option>15-60 min</option><option>60+ min</option><option>Mixed</option>
+                  </select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Avg Description Length</label>
+                  <select class="form-select" name="avg_desc_length"><option value="">Unknown</option><option>Empty</option><option>Short</option><option>Medium</option><option>Long with links/timestamps</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Tags per Video</label>
+                  <select class="form-select" name="tags_per_video"><option value="">Unknown</option><option>None</option><option>Few (1-5)</option><option>Many (5-20)</option><option>Excessive (20+)</option></select>
+                </div>
+                {% endif %}
+
+                {# --- TikTok activity --- #}
+                {% if platform == "tiktok" %}
+                <div class="col-md-6"><label class="form-label small">Avg Views per Video</label><input class="form-control" type="number" name="avg_views" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Avg Likes per Video</label><input class="form-control" type="number" name="avg_likes_video" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Upload Frequency</label>
+                  <select class="form-select" name="upload_frequency"><option value="">Unknown</option><option>Multiple daily</option><option>Daily</option><option>Weekly</option><option>Monthly</option><option>Sporadic</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Video Length</label>
+                  <select class="form-select" name="video_length"><option value="">Unknown</option><option>&lt; 15 sec</option><option>15-60 sec</option><option>1-3 min</option><option>3-10 min</option><option>Mixed</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Uses Trending Sounds/Hashtags</label>
+                  <select class="form-select" name="uses_trending"><option value="">Unknown</option><option>Always</option><option>Sometimes</option><option>Rarely</option><option>Never</option></select>
+                </div>
+                {% endif %}
+
+                {# --- Discord activity --- #}
+                {% if platform == "discord" %}
+                <div class="col-md-6"><label class="form-label small">Server Count</label><input class="form-control" type="number" name="server_count" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Days Until First Message</label><input class="form-control" type="number" name="days_first_message" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Total Roles</label><input class="form-control" type="number" name="role_count" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Message Frequency</label>
+                  <select class="form-select" name="message_frequency"><option value="">Unknown</option><option>Very active</option><option>Active</option><option>Moderate</option><option>Low</option><option>Silent</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Join Velocity</label>
+                  <select class="form-select" name="join_velocity"><option value="">Unknown</option><option>Joined many servers quickly</option><option>Gradual over time</option><option>Single server only</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Primary Activity (multi)</label>
+                  <select class="form-select" name="primary_activity" multiple size="4">
+                    <option>Crypto</option><option>Promo</option><option>Gaming</option><option>Community chat</option><option>Support</option><option>NSFW</option><option>Other</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {# --- Snapchat activity --- #}
+                {% if platform == "snapchat" %}
+                <div class="col-md-6"><label class="form-label small">Snap Frequency</label>
+                  <select class="form-select" name="snap_frequency"><option value="">Unknown</option><option>Very active</option><option>Active</option><option>Moderate</option><option>Low</option></select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Story Frequency</label>
+                  <select class="form-select" name="story_frequency"><option value="">Unknown</option><option>Daily</option><option>Weekly</option><option>Rarely</option><option>Never</option></select>
+                </div>
+                <div class="col-md-12">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="sends_unsolicited"><label class="form-check-label small">Sends random snaps to strangers</label></div>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Primary Activity (multi)</label>
+                  <select class="form-select" name="primary_activity" multiple size="4">
+                    <option>Personal</option><option>Crypto promo</option><option>Adult content</option><option>Spam</option><option>Other</option>
+                  </select>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Score Growth</label>
+                  <select class="form-select" name="score_growth"><option value="">Unknown</option><option>Gradual natural growth</option><option>Sudden suspicious spike</option><option>Stagnant/dead</option></select>
+                </div>
+                {% endif %}
+
+                {# --- Recent posts textarea (always present) --- #}
+                {% set posts_field = "recent_posts" %}
+                {% set posts_label = "Recent Posts" %}
+                {% if platform == "reddit" %}{% set posts_field = "recent_comments" %}{% set posts_label = "Recent Comments" %}{% endif %}
+                {% if platform == "youtube" %}{% set posts_field = "recent_titles" %}{% set posts_label = "Recent Video Titles" %}{% endif %}
+                {% if platform == "discord" %}{% set posts_field = "recent_messages" %}{% set posts_label = "Recent Messages" %}{% endif %}
+                {% if platform == "tiktok" %}{% set posts_field = "recent_captions" %}{% set posts_label = "Recent Video Captions" %}{% endif %}
+                <div class="col-12">
+                  <label class="form-label small">{{ posts_label }} (3-5, one per line)</label>
+                  <textarea class="form-control" name="{{ posts_field }}" id="f_recent_posts" rows="5" placeholder="Paste 3-5 recent items, one per line..."></textarea>
+                  <div id="posts-analysis-result" class="analysis-inline mt-2" style="display:none;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ==================================================== #}
+        {# Section 5 — Network info / Career consistency       #}
+        {# ==================================================== #}
+        <div class="accordion-item rounded-4 mb-2 overflow-hidden">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sec5">
+              <span class="me-auto">
+                <i class="bi bi-5-circle me-2"></i>
+                <strong>{% if platform == "linkedin" %}Career Consistency & Network{% else %}Network Info{% endif %}</strong>
+              </span>
+              <span class="badge bg-secondary me-3">Optional — improves accuracy</span>
+            </button>
+          </h2>
+          <div id="sec5" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="row g-3">
+
+                {% if platform == "linkedin" %}
+                <div class="col-md-4"><label class="form-label small">Job Dates Sequential?</label>
+                  <select class="form-select" name="job_dates_sequential">
+                    <option value="">Unknown</option><option>Yes, logical timeline</option><option>No, overlaps or impossible gaps</option>
+                  </select>
+                </div>
+                <div class="col-md-4"><label class="form-label small">Industry Consistent?</label>
+                  <select class="form-select" name="industry_consistent">
+                    <option value="">Unknown</option><option>Same field throughout</option><option>Career change (makes sense)</option><option>Random unrelated mix</option>
+                  </select>
+                </div>
+                <div class="col-md-4"><label class="form-label small">Location Matches Jobs?</label>
+                  <select class="form-select" name="location_matches">
+                    <option value="">Unknown</option><option>Yes, location matches listed jobs</option><option>No, mismatches</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {# --- Follower / friend / connection quality --- #}
+                {% set fq_field = "follower_quality" %}
+                {% if platform == "facebook" %}{% set fq_field = "friend_quality" %}{% endif %}
+                {% if platform == "linkedin" %}{% set fq_field = "connection_quality" %}{% endif %}
+                {% if platform == "youtube" %}{% set fq_field = "subscriber_quality" %}{% endif %}
+                {% if platform != "snapchat" %}
+                <div class="col-md-6">
+                  <label class="form-label small">{{ fq_field.replace('_', ' ').title() }}</label>
+                  <select class="form-select" name="{{ fq_field }}">
+                    <option value="">Unknown</option>
+                    {% if platform == "github" %}
+                    <option>Active developers</option><option>Mixed</option><option>Mostly empty profiles</option>
+                    {% elif platform == "linkedin" %}
+                    <option>Mostly real professionals</option><option>Mixed</option><option>Mostly empty profiles</option>
+                    {% elif platform == "youtube" %}
+                    <option>Appears organic growth</option><option>Suspicious growth pattern</option><option>Can't tell</option>
+                    {% else %}
+                    <option>Mostly real-looking accounts</option><option>Mix of real and suspicious</option><option>Mostly bots/empty profiles</option><option>Can't tell</option>
+                    {% endif %}
+                  </select>
+                </div>
+                {% endif %}
+
+                {% if platform in ["instagram","x"] %}
+                <div class="col-md-6">
+                  <label class="form-label small">Mutual Follow Rate</label>
+                  <select class="form-select" name="mutual_follow_rate">
+                    <option value="">Unknown</option><option>High (most follow back)</option><option>Medium</option><option>Low (one-directional)</option>
+                  </select>
+                </div>
+                <div class="col-md-6">
+                  <div class="form-check form-switch mt-4"><input class="form-check-input" type="checkbox" name="follows_celebrities"><label class="form-check-label small">Follows lots of celebrities</label></div>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Follower Growth</label>
+                  <select class="form-select" name="follower_growth">
+                    <option value="">Unknown</option><option>Gradual organic growth</option><option>Sudden spike</option><option>Steady decline</option><option>No change</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {% if platform == "facebook" %}
+                <div class="col-md-6"><label class="form-label small">Mutual Friends with You</label><input class="form-control" type="number" name="mutual_friends" min="0"></div>
+                <div class="col-md-6"><label class="form-label small">Public Group Memberships</label><input class="form-control" type="number" name="group_count" min="0"></div>
+                {% endif %}
+                {% if platform == "linkedin" %}
+                <div class="col-md-6"><label class="form-label small">Mutual Connections with You</label><input class="form-control" type="number" name="mutual_connections" min="0"></div>
+                {% endif %}
+                {% if platform == "github" %}
+                <div class="col-md-6"><label class="form-label small">Public Org Memberships</label><input class="form-control" type="number" name="org_count" min="0"></div>
+                {% endif %}
+                {% if platform == "tiktok" %}
+                <div class="col-md-6"><label class="form-label small">Likes / Follower Ratio</label>
+                  <select class="form-select" name="likes_follower_ratio">
+                    <option value="">Unknown</option><option>High (organic)</option><option>Balanced</option><option>Suspiciously low</option>
+                  </select>
+                </div>
+                {% endif %}
+                {% if platform == "reddit" %}
+                <div class="col-md-6"><label class="form-label small">Karma vs Activity Ratio</label>
+                  <select class="form-select" name="karma_activity_ratio">
+                    <option value="">Unknown</option><option>High karma, low posts (quality)</option><option>Balanced</option><option>Low karma, high posts (spam-like)</option>
+                  </select>
+                </div>
+                {% endif %}
+
+                {# --- Discord suspicion indicators --- #}
+                {% if platform == "discord" %}
+                <div class="col-md-12 d-flex flex-wrap gap-3">
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="sends_unsolicited_dms"><label class="form-check-label small">Sends unsolicited DMs</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="mentions_everyone"><label class="form-check-label small">Frequent @everyone / @here</label></div>
+                  <div class="form-check form-switch"><input class="form-check-input" type="checkbox" name="posts_invite_links"><label class="form-check-label small">Posts server invite links</label></div>
+                </div>
+                <div class="col-md-6"><label class="form-label small">Suspicion Score (0-100, if available)</label>
+                  <input class="form-control" type="number" name="suspicion_score" min="0" max="100"></div>
+                {% endif %}
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {# ==================================================== #}
+        {# Section 6 — Cross-Platform Presence                 #}
+        {# ==================================================== #}
+        <div class="accordion-item rounded-4 mb-2 overflow-hidden">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#sec6">
+              <span class="me-auto"><i class="bi bi-6-circle me-2"></i><strong>Cross-Platform Presence</strong></span>
+              <span class="badge bg-secondary me-3">Optional — improves accuracy</span>
+            </button>
+          </h2>
+          <div id="sec6" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="mb-3">
+                <label class="form-label small">Same name/username exists on:</label>
+                <div class="d-flex flex-wrap gap-3">
+                  {% for value, label in MULTI_PLATFORM_OPTIONS %}
+                    {% if value != platform %}
+                    <div class="form-check">
+                      <input class="form-check-input" type="checkbox" name="cross_platforms" value="{{ label }}" id="cp_{{ value }}">
+                      <label class="form-check-label small" for="cp_{{ value }}">{{ label }}</label>
+                    </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+              </div>
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <label class="form-label small">Profile Consistency Across Platforms</label>
+                  <select class="form-select" name="cross_platform_consistency">
+                    <option value="">Didn't check</option>
+                    <option>Same name/bio/photo everywhere</option>
+                    <option>Similar but not identical</option>
+                    <option>Very different profiles</option>
+                    <option>Only exists on this platform</option>
+                  </select>
+                </div>
+                {% if platform in ["instagram","x"] %}
+                <div class="col-md-6">
+                  <label class="form-label small">Account Ages Across Platforms</label>
+                  <select class="form-select" name="cross_platform_ages">
+                    <option value="">Didn't check</option>
+                    <option>Yes, similar age across platforms</option>
+                    <option>No, created at very different times</option>
+                    <option>Some platforms much newer</option>
+                  </select>
+                </div>
+                {% endif %}
+                {% if platform == "discord" %}
+                <div class="col-md-12">
+                  <label class="form-label small">Visible Connected Accounts (multi)</label>
+                  <select class="form-select" name="connected_accounts" multiple size="4">
+                    <option>GitHub</option><option>Twitter</option><option>Spotify</option><option>YouTube</option><option>Steam</option><option>PlayStation</option><option>Xbox</option>
+                  </select>
+                </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>{# /accordion #}
+
+      <!-- Derived feature panel -->
+      <div id="derivedPanel" class="card bg-body-tertiary rounded-4 mb-3 d-none">
+        <div class="card-body p-3">
+          <div class="small text-muted mb-1"><i class="bi bi-calculator me-1"></i>Derived signals (computed on the fly)</div>
+          <div id="derivedContent" class="small d-flex flex-wrap gap-3"></div>
+        </div>
+      </div>
+
+      <div class="d-flex gap-2 mb-5">
+        <button class="btn btn-primary px-4" type="submit" id="submitBtn">
+          <i class="bi bi-search me-2"></i>Analyze Profile
+        </button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('index') }}">Back</a>
+      </div>
+    </form>
+
   </div>
 </div>
+
+<!-- Inline analysis result styling -->
+<style>
+  .analysis-inline {
+    background: var(--bs-tertiary-bg);
+    border: 1px solid var(--bs-border-color);
+    border-radius: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+  }
+  .analysis-inline .signal { display:inline-block; margin-right:0.75rem; white-space:nowrap; }
+  .analysis-inline .ok    { color: var(--bs-success); }
+  .analysis-inline .warn  { color: var(--bs-warning); }
+  .analysis-inline .bad   { color: var(--bs-danger); }
+  .analysis-inline .neutral { color: var(--bs-secondary-color); }
+  .accordion-button:not(.collapsed) { background-color: var(--bs-tertiary-bg); }
+</style>
 {% endblock %}
 
 {% block scripts %}
-{% if live_lookup %}
-<script>
-document.getElementById('lookupBtn').addEventListener('click', function() {
-  const username = document.getElementById('lookupInput').value.trim();
-  if (!username) return;
-
-  const btn = this;
-  const status = document.getElementById('lookupStatus');
-  const badge = document.getElementById('fieldsFilledBadge');
-  const badgeCount = document.getElementById('fieldsFilledCount');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Fetching...';
-  status.className = 'small mt-2 text-muted';
-  status.textContent = 'Fetching profile data...';
-  status.classList.remove('d-none');
-  badge.classList.add('d-none');
-
-  const platform = '{{ platform }}';
-  fetch(`/api/live/${platform}/${encodeURIComponent(username)}`)
-    .then(r => r.json())
-    .then(data => {
-      if (data.error) {
-        status.className = 'small mt-2 text-danger';
-        status.textContent = '✗ ' + data.error;
-      } else {
-        const feat = data.features || {};
-        const fieldMap = {
-          'username': data.username || data.name || username,
-          'name': data.name || data.username || username,
-          'followers': data.followers,
-          'following': data.following,
-          'public_repos': data.public_repos || feat.public_repos,
-          'public_gists': data.public_gists !== undefined ? data.public_gists : feat.public_gists,
-          'account_age_days': data.account_age_days !== undefined ? data.account_age_days : feat.account_age_days,
-          'bio': data.bio || data.about || data.description || feat.bio || '',
-          'karma': data.karma,
-          'created_at': data.created_at || '',
-          'about': data.about || data.bio || data.description || feat.about || '',
-          'subscribers': data.subscribers || feat.subscribers,
-          'videos': data.videos || feat.videos,
-          'has_avatar': data.has_avatar !== undefined ? (data.has_avatar ? 1 : 0) : undefined,
-          'suspicion_score': data.suspicion_score,
-          'connections': data.connections || feat.connections,
-          'headline': data.headline || feat.headline,
-          'channel_name': data.channel_name || feat.channel_name,
-          'tweets': data.tweets || feat.tweets,
-          'posts': data.posts || feat.posts,
-          'score': data.score || feat.score,
-        };
-        let filled = 0;
-        Object.entries(fieldMap).forEach(([field, val]) => {
-          const el = document.getElementById('f_' + field);
-          if (el && val !== undefined && val !== null && val !== '') {
-            el.value = val;
-            filled++;
-          }
-        });
-        // Checkboxes
-        const avatarEl = document.getElementById('has_avatar');
-        if (avatarEl && data.has_avatar !== undefined) {
-          avatarEl.checked = !!data.has_avatar;
-        }
-        status.className = 'small mt-2 text-success';
-        status.textContent = `✓ Profile loaded: @${data.username || data.channel_name || username}`;
-        if (data.completeness !== undefined) {
-          status.textContent += ` (${Math.round(data.completeness * 100)}% data completeness)`;
-        }
-        badgeCount.textContent = `Fetched ${filled} fields`;
-        badge.classList.remove('d-none');
-      }
-    })
-    .catch(err => {
-      status.className = 'small mt-2 text-danger';
-      status.textContent = '✗ Network error: ' + err;
-    })
-    .finally(() => {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-search me-1"></i>Fetch Profile';
-    });
-});
-</script>
-{% endif %}
-
-{% if result and (not analysis_depth or analysis_depth == 'quick') %}
-{% set conf_val = confidence|default(50)|float %}
-{% if conf_val > 40 and conf_val < 80 %}
-<script>
-const deepBtn = document.getElementById('deepAnalysisBtn');
-const progressPanel = document.getElementById('deepProgressPanel');
-const progressSteps = document.getElementById('deepProgressSteps');
-const resultPanel = document.getElementById('deepResultPanel');
-const resultCard = document.getElementById('deepResultCard');
-
-if (deepBtn) {
-  deepBtn.addEventListener('click', function() {
-    deepBtn.disabled = true;
-    deepBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing...';
-    progressPanel.classList.remove('d-none');
-
-    // Collect form data
-    const formData = {};
-    document.querySelectorAll('#predictForm input, #predictForm select, #predictForm textarea').forEach(el => {
-      if (el.name && el.name !== 'csrf_token') {
-        if (el.type === 'checkbox') {
-          formData[el.name] = el.checked ? 1 : 0;
-        } else {
-          formData[el.name] = el.value;
-        }
-      }
-    });
-
-    const platform = '{{ platform }}';
-    const csrfToken = document.querySelector('[name=csrf_token]').value;
-
-    progressSteps.innerHTML = `
-      <div class="list-group-item border-0 ps-0 text-muted small">
-        <span class="spinner-border spinner-border-sm me-2"></span>Running deep analysis...
-      </div>`;
-
-    fetch(`/predict-deep/${platform}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
-      body: JSON.stringify(formData),
-    })
-    .then(r => r.json())
-    .then(data => {
-      progressPanel.classList.add('d-none');
-      if (data.error) {
-        resultCard.innerHTML = `<div class="card-body p-4 text-danger"><i class="bi bi-x-circle me-2"></i>${data.error}</div>`;
-      } else {
-        const isF = data.label === 'Fake';
-        const color = isF ? 'danger' : 'success';
-        const icon = isF ? 'x-circle' : 'check-circle';
-        const depthBadge = data.analysis_depth === 'deep'
-          ? '<span class="badge bg-primary me-2"><i class="bi bi-layers me-1"></i>Deep Analysis</span>'
-          : '<span class="badge bg-secondary me-2"><i class="bi bi-lightning me-1"></i>Quick</span>';
-        let stepsHtml = '';
-        if (data.enrichment_summary) {
-          const s = data.enrichment_summary;
-          if (s.live_completeness !== undefined)
-            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Live data fetched (${Math.round(s.live_completeness*100)}% complete)</li>`;
-          if (s.photo_analyzed)
-            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Photo analyzed</li>`;
-          if (s.behavioral_posts)
-            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Behavioral fingerprint: ${s.behavioral_posts} posts</li>`;
-          if (s.platforms_found !== undefined)
-            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-check-circle text-success me-2"></i>Cross-platform: found on ${s.platforms_found} other platforms</li>`;
-          if (s.extra_features_added)
-            stepsHtml += `<li class="list-group-item border-0 ps-0 small"><i class="bi bi-plus-circle text-primary me-2"></i>${s.extra_features_added} extra features added</li>`;
-          if (s.total_time_s)
-            stepsHtml += `<li class="list-group-item border-0 ps-0 small text-muted"><i class="bi bi-clock me-2"></i>Completed in ${s.total_time_s}s</li>`;
-        }
-        resultCard.innerHTML = `
-          <div class="card-body p-4">
-            <div class="text-center mb-3">
-              ${depthBadge}
-              <div class="display-5 fw-bold text-${color} mt-2">
-                <i class="bi bi-${icon} me-2"></i>${data.label}
-              </div>
-              <div class="mt-2">Confidence: <strong class="text-${color}">${(data.confidence||0).toFixed(1)}%</strong>
-                ${data.confidence_label ? `<span class="badge bg-light text-dark border ms-1">${data.confidence_label}</span>` : ''}
-              </div>
-              <div class="progress mt-2 mx-auto" style="height:10px;max-width:300px;border-radius:5px;">
-                <div class="progress-bar bg-${color}" style="width:${data.confidence||0}%"></div>
-              </div>
-            </div>
-            ${stepsHtml ? `<h6 class="small text-muted mt-3 mb-2">Analysis Steps</h6><ul class="list-group list-group-flush">${stepsHtml}</ul>` : ''}
-          </div>`;
-      }
-      resultPanel.classList.remove('d-none');
-    })
-    .catch(err => {
-      progressPanel.classList.add('d-none');
-      resultCard.innerHTML = `<div class="card-body p-4 text-danger"><i class="bi bi-x-circle me-2"></i>Network error: ${err}</div>`;
-      resultPanel.classList.remove('d-none');
-    });
-  });
-}
-</script>
-{% endif %}
-{% endif %}
-
-{% if result and confidence is not none and confidence < 70 %}
-<script>
-const wizardApplyBtn = document.getElementById('wizardApplyBtn');
-if (wizardApplyBtn) {
-  wizardApplyBtn.addEventListener('click', function() {
-    // Copy wizard field values into the main form, then submit
-    document.querySelectorAll('.wizard-field').forEach(el => {
-      const mainEl = document.getElementById('f_' + el.name) || document.getElementById(el.name);
-      if (mainEl) {
-        if (el.type === 'checkbox') {
-          mainEl.checked = el.checked;
-        } else if (el.value.trim() !== '') {
-          mainEl.value = el.value.trim();
-        }
-      }
-    });
-    // Close modal then submit
-    const modal = bootstrap.Modal.getInstance(document.getElementById('improvementWizard'));
-    if (modal) modal.hide();
-    document.getElementById('predictForm').submit();
-  });
-}
-</script>
-{% endif %}
+<script src="{{ url_for('static', filename='js/quick_fill_data.js') }}"></script>
+<script src="{{ url_for('static', filename='js/predict_form.js') }}"></script>
 {% endblock %}

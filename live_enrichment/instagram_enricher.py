@@ -1,8 +1,8 @@
 """
 live_enrichment/instagram_enricher.py — Instagram live profile enrichment.
 
-Uses Instagram Basic Display API (INSTAGRAM_ACCESS_TOKEN env var).
-Falls back to instaloader for public profiles if token unavailable.
+Uses RapidAPI Instagram Scraper API (RAPIDAPI_INSTAGRAM_KEY env var).
+Falls back to instaloader for public profiles if key unavailable.
 """
 from __future__ import annotations
 
@@ -23,33 +23,51 @@ try:
     INSTALOADER_AVAILABLE = True
 except ImportError:
     INSTALOADER_AVAILABLE = False
-    logger.debug("instaloader not available — Instagram API-only mode.")
+    logger.debug("instaloader not available — RapidAPI-only mode.")
 
-_GRAPH_BASE = "https://graph.instagram.com"
+_RAPIDAPI_HOST = "instagram-scraper-api2.p.rapidapi.com"
+_RAPIDAPI_BASE = f"https://{_RAPIDAPI_HOST}"
 _TIMEOUT = 10
 
 
-def _api_enrich(username: str) -> Optional[Dict]:
-    """Use Instagram Basic Display API (requires access token)."""
-    token = os.environ.get("INSTAGRAM_ACCESS_TOKEN")
-    if not token or not REQUESTS_AVAILABLE:
+def _rapidapi_enrich(username: str) -> Optional[Dict]:
+    """Fetch profile via RapidAPI Instagram Scraper API."""
+    key = os.environ.get("RAPIDAPI_INSTAGRAM_KEY")
+    if not key or not REQUESTS_AVAILABLE:
         return None
 
     try:
-        # With Basic Display API, we can only look up the token owner's profile
-        # For public lookups, Instagram Graph API Business requires page access
         r = _http.get(
-            f"{_GRAPH_BASE}/me",
-            params={"fields": "id,username,biography,followers_count,media_count,"
-                               "profile_picture_url,website,is_verified",
-                    "access_token": token},
-            timeout=_TIMEOUT
+            f"{_RAPIDAPI_BASE}/v1/info",
+            params={"username_or_id_or_url": username},
+            headers={
+                "x-rapidapi-key": key,
+                "x-rapidapi-host": _RAPIDAPI_HOST,
+            },
+            timeout=_TIMEOUT,
         )
         if r.status_code == 200:
-            return r.json()
-        logger.debug("Instagram API → %d", r.status_code)
+            data = r.json()
+            user = data.get("data", {})
+            if not user:
+                logger.debug("RapidAPI: empty data for '%s'", username)
+                return None
+            return {
+                "username": user.get("username", username),
+                "followers": user.get("follower_count", 0),
+                "following": user.get("following_count", 0),
+                "media_count": user.get("media_count", 0),
+                "bio": user.get("biography", ""),
+                "profile_pic_url": user.get("profile_pic_url_hd") or user.get("profile_pic_url", ""),
+                "is_verified": user.get("is_verified", False),
+                "website": user.get("external_url", ""),
+                "full_name": user.get("full_name", ""),
+                "is_private": user.get("is_private", False),
+                "is_business": user.get("is_business", False),
+            }
+        logger.debug("RapidAPI Instagram → %d: %s", r.status_code, r.text[:200])
     except Exception as exc:
-        logger.debug("Instagram API error: %s", exc)
+        logger.debug("RapidAPI Instagram error for '%s': %s", username, exc)
     return None
 
 
@@ -71,6 +89,9 @@ def _instaloader_enrich(username: str) -> Optional[Dict]:
             "profile_pic_url": profile.profile_pic_url or "",
             "is_verified": profile.is_verified,
             "website": profile.external_url or "",
+            "full_name": profile.full_name or "",
+            "is_private": profile.is_private,
+            "is_business": profile.is_business_account,
         }
     except Exception as exc:
         logger.debug("instaloader error for '%s': %s", username, exc)
@@ -83,38 +104,33 @@ def enrich(username: str) -> Dict:
 
     Returns a standardised dict with raw_data, features, data_completeness_score.
     """
-    # Try API first, then instaloader
-    api_data = _api_enrich(username)
     raw: Dict = {}
     fields_fetched = 0
     fields_total = 4
 
-    if api_data:
-        raw = api_data
-        fields_fetched = 3
-    else:
-        il_data = _instaloader_enrich(username)
-        if il_data:
-            raw = il_data
-            fields_fetched = 3
-        else:
-            return {
-                "error": f"Instagram profile '{username}' not accessible "
-                         "(no INSTAGRAM_ACCESS_TOKEN and instaloader failed)",
-                "data_completeness_score": 0.0,
-                "raw_data": {},
-                "features": {},
-                "platform": "instagram",
-            }
+    raw = _rapidapi_enrich(username) or _instaloader_enrich(username) or {}
 
-    followers = raw.get("followers", raw.get("followers_count", 0)) or 0
-    following = raw.get("following", raw.get("following_count", 0)) or 0
+    if not raw:
+        return {
+            "error": f"Instagram profile '{username}' not accessible "
+                     "(RapidAPI key missing/failed and instaloader failed)",
+            "data_completeness_score": 0.0,
+            "raw_data": {},
+            "features": {},
+            "platform": "instagram",
+        }
+
+    fields_fetched = 4
+
+    followers = raw.get("followers", 0) or 0
+    following = raw.get("following", 0) or 0
     media_count = raw.get("media_count", 0) or 0
-    bio = raw.get("bio", raw.get("biography", "")) or ""
-    profile_pic = raw.get("profile_pic_url", raw.get("profile_picture_url", "")) or ""
+    bio = raw.get("bio", "") or ""
+    profile_pic = raw.get("profile_pic_url", "") or ""
     is_verified = bool(raw.get("is_verified", False))
     has_url = bool(raw.get("website", ""))
-    fields_fetched += 1
+    is_private = bool(raw.get("is_private", False))
+    is_business = bool(raw.get("is_business", False))
 
     features = {
         "followers": followers,
@@ -123,6 +139,8 @@ def enrich(username: str) -> Dict:
         "bio": bio,
         "avatar_url": profile_pic,
         "is_verified": int(is_verified),
+        "is_private": int(is_private),
+        "is_business": int(is_business),
         "follower_following_ratio": followers / max(following, 1),
         "media_per_follower": media_count / max(followers, 1),
         "bio_url_present": int(has_url),
@@ -134,8 +152,8 @@ def enrich(username: str) -> Dict:
     }
 
     logger.info(
-        "Instagram enrichment for '%s': completeness=%.2f followers=%d posts=%d",
-        username, fields_fetched / fields_total, followers, media_count,
+        "Instagram enrichment for '%s': completeness=%.2f followers=%d posts=%d verified=%s",
+        username, fields_fetched / fields_total, followers, media_count, is_verified,
     )
 
     return {

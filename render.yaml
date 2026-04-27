@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: fake-profile-detector
+    runtime: docker
+    plan: starter        # upgrade to standard for more RAM (ML models need ~512 MB+)
+    healthCheckPath: /
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true   # Render auto-generates a secure random value
+      - key: FLASK_DEBUG
+        value: 0
+      - key: REQUIRE_AUTH
+        value: 0
+      - key: GITHUB_TOKEN
+        value: ""             # Optional: add your GitHub PAT for higher API rate limits
+      - key: RAPIDAPI_INSTAGRAM_KEY
+        value: ""             # Optional: RapidAPI key for live Instagram scraping
+    disk:
+      name: app-data
+      mountPath: /app/instance   # persists the SQLite database across deploys/restarts
+      sizeGB: 1

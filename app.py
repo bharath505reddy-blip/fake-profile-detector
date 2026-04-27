@@ -846,8 +846,37 @@ def manual_predict(platform: str):
     except Exception:
         api_key_configured = False
 
+    data_coverage = None
+    fields_filled = None
+    fields_total = None
+
     if request.method == "POST":
-        df = _build_single_row_df(platform, request.form)
+        from features.manual_feature_mapper import ManualFeatureMapper
+        from features.missing_value_handler import handle_missing_features
+
+        mapper = ManualFeatureMapper()
+        mapped = mapper.map_form_to_features(request.form, platform)
+
+        # Coverage: fields the user actually filled in (non-empty / non-None)
+        # vs. the total set of mappable feature keys for this platform.
+        countable = {
+            k: v for k, v in mapped.items()
+            if not k.endswith("_missing") and not k.endswith("_features_json")
+        }
+        fields_total = len(countable)
+        fields_filled = sum(
+            1 for v in countable.values()
+            if v is not None and v != "" and v != 0
+        )
+        data_coverage = (fields_filled / fields_total) if fields_total else 0.0
+
+        # Fill missing optional features with platform medians + add *_missing flags.
+        filled = handle_missing_features(mapped, platform)
+
+        # Build the single-row DataFrame the feature_builder can consume.
+        # Numeric values stay numeric; strings stay strings; the builder picks
+        # whichever columns it knows about.
+        df = pd.DataFrame([filled])
         form_data = request.form.to_dict()
         tag = os.urandom(8).hex()
 
@@ -869,9 +898,8 @@ def manual_predict(platform: str):
         raw_conf = df_pred["confidence"].iloc[0] if "confidence" in df_pred.columns else None
         confidence = _safe_confidence(raw_conf)
         shap_chart = chart_files.get("shap_single", "")
-        analysis_depth = "quick"
+        analysis_depth = "manual_comprehensive"
 
-        # Compute confidence label
         if confidence is not None:
             try:
                 from prediction.tiered_predictor import confidence_label as _conf_label
@@ -879,34 +907,60 @@ def manual_predict(platform: str):
             except Exception:
                 pass
 
-        # Compute username + bio forensics (fast, no network)
-        username = form_data.get("username") or form_data.get("name") or ""
-        bio_text = form_data.get("bio") or form_data.get("about") or form_data.get("headline") or ""
-        try:
-            from features.username_forensics import analyze_username
-            username_features = analyze_username(username) if username else None
-        except Exception:
-            pass
-        try:
-            from features.bio_forensics import analyze_bio
-            bio_features = analyze_bio(bio_text, platform) if bio_text else None
-        except Exception:
-            pass
+        # Surface the rich forensic + photo signals computed by the mapper into
+        # the result template (it already has display blocks for these).
+        username_features = {
+            k: v for k, v in mapped.items()
+            if k.startswith("uname_") and v is not None
+        } or None
+        bio_features = {
+            k: v for k, v in mapped.items()
+            if k.startswith("bio_") and v is not None
+        } or None
+        photo_features = {
+            k: v for k, v in mapped.items()
+            if k.startswith("photo_") and v is not None
+        } or None
+        if photo_features and "photo_available" not in photo_features:
+            photo_features["photo_available"] = 1
 
-        # Compute confidence explanation for the breakdown panel
+        # Confidence explanation
         if result is not None and confidence is not None:
             try:
                 from features.confidence_explainer import (
                     generate_confidence_explanation,
                     adjust_confidence_for_display,
                 )
-                all_features = {**form_data}
-                confidence = adjust_confidence_for_display(confidence, result, all_features)
+                confidence = adjust_confidence_for_display(confidence, result, filled)
                 confidence_explanation = generate_confidence_explanation(
-                    result, confidence, all_features, platform=platform
+                    result, confidence, filled, platform=platform
                 )
+                if confidence_explanation is not None:
+                    confidence_explanation["data_coverage_pct"] = round(data_coverage * 100, 1)
             except Exception:
                 pass
+
+        # Audit log
+        try:
+            uname = (
+                mapped.get("username") or mapped.get("name")
+                or mapped.get("channel_name") or ""
+            )
+            db.session.add(PredictionLog(
+                username=uname[:255],
+                platform=platform,
+                prediction=result,
+                confidence=confidence,
+                analysis_depth="manual_comprehensive",
+                features_json=json.dumps(
+                    {k: v for k, v in mapped.items() if not isinstance(v, (dict, list))},
+                    default=str,
+                )[:65535],
+            ))
+            db.session.commit()
+        except Exception as exc:
+            logger.debug("PredictionLog write failed: %s", exc)
+            db.session.rollback()
 
     return render_template(
         "manual_predict.html",
@@ -927,6 +981,9 @@ def manual_predict(platform: str):
         bio_features=bio_features,
         photo_features=photo_features,
         confidence_explanation=confidence_explanation,
+        data_coverage=data_coverage,
+        fields_filled=fields_filled,
+        fields_total=fields_total,
     )
 
 
@@ -1798,6 +1855,111 @@ def analyze_username_api(username: str):
         from features.username_forensics import analyze_username
         return jsonify(analyze_username(username))
     except Exception as exc:
+        return jsonify({"error": str(exc)}), 500
+
+
+@csrf.exempt
+@app.route("/api/v1/analyze/bio", methods=["POST"])
+def analyze_bio_api():
+    """
+    Bio forensics: language, spam score, template similarity, emojis,
+    invisible chars, URL/phone presence, excessive caps.
+    ---
+    tags:
+      - Analysis API
+    parameters:
+      - in: body
+        name: body
+        schema:
+          properties:
+            bio: { type: string }
+            platform: { type: string }
+    """
+    data = request.get_json(silent=True) or {}
+    bio = (data.get("bio") or "").strip()
+    platform = (data.get("platform") or "").lower()
+    if not bio:
+        return jsonify({"error": "No bio provided"}), 400
+    try:
+        from features.bio_forensics import analyze_bio
+        return jsonify(analyze_bio(bio, platform))
+    except Exception as exc:
+        logger.exception("analyze_bio failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+
+
+@csrf.exempt
+@app.route("/api/v1/analyze/avatar", methods=["POST"])
+def analyze_avatar_api():
+    """
+    Profile photo analysis: default avatar detection, stock photo match,
+    AI-generated heuristic, color entropy, EXIF.
+    Accepts either multipart file upload (avatar_file) or JSON {avatar_url, platform}.
+    ---
+    tags:
+      - Analysis API
+    """
+    import tempfile
+    try:
+        from features.photo_analysis import analyze_avatar
+    except Exception as exc:
+        return jsonify({"error": f"Photo analysis unavailable: {exc}"}), 503
+
+    platform = (request.form.get("platform") or
+                (request.get_json(silent=True) or {}).get("platform") or "").lower()
+    identifier = (request.form.get("identifier") or
+                  (request.get_json(silent=True) or {}).get("identifier") or "")
+
+    if "avatar_file" in request.files:
+        f = request.files["avatar_file"]
+        if not f.filename:
+            return jsonify({"error": "Empty file"}), 400
+        ext = (f.filename.rsplit(".", 1)[-1].lower()
+               if "." in f.filename else "jpg")
+        if ext not in {"jpg", "jpeg", "png", "gif", "webp", "bmp"}:
+            return jsonify({"error": f"Unsupported image type: {ext}"}), 400
+        tmp = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False)
+        try:
+            f.save(tmp.name)
+            tmp.close()
+            return jsonify(analyze_avatar(tmp.name, platform, identifier))
+        finally:
+            try: os.unlink(tmp.name)
+            except OSError: pass
+
+    body = request.get_json(silent=True) or {}
+    url = (body.get("avatar_url") or "").strip()
+    if url:
+        return jsonify(analyze_avatar(url, platform, identifier))
+
+    return jsonify({"error": "No image provided. Upload avatar_file or pass avatar_url."}), 400
+
+
+@csrf.exempt
+@app.route("/api/v1/analyze/posts", methods=["POST"])
+def analyze_posts_api():
+    """
+    NLP analysis on a paste of recent posts/captions/comments.
+    Returns lexical diversity, sentiment variance, duplicate ratio,
+    hashtag/URL/emoji ratios, average length.
+    ---
+    tags:
+      - Analysis API
+    """
+    data = request.get_json(silent=True) or {}
+    posts_text = (data.get("posts") or "").strip()
+    if not posts_text:
+        return jsonify({"error": "No posts provided"}), 400
+    posts_list = [p.strip() for p in posts_text.split("\n") if p.strip()]
+    if not posts_list:
+        return jsonify({"error": "No posts provided"}), 400
+    try:
+        from features.manual_feature_mapper import analyze_pasted_posts
+        result = analyze_pasted_posts(posts_list)
+        result["post_count_analyzed"] = len(posts_list)
+        return jsonify(result)
+    except Exception as exc:
+        logger.exception("analyze_posts failed: %s", exc)
         return jsonify({"error": str(exc)}), 500
 
 

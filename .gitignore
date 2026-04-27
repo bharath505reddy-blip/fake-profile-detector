@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pycache
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Environment / secrets
+.env
+*.env.local
+
+# Flask / SQLite
+instance/users.db
+instance/*.db
+
+# Uploads (user-submitted CSVs)
+uploads/
+
+# Generated charts (recreated at runtime)
+static/charts/*.png
+
+# ML artefacts that shouldn't be version-controlled
+# (models/*.pkl ARE committed intentionally — pre-trained weights ship with the image)
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Test / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
