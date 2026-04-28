@@ -33,6 +33,43 @@ PLATFORMS = [
 # Bio / username helpers
 # ---------------------------------------------------------------------------
 
+# Celebrity / public figure bio templates (very short or empty is NORMAL)
+CELEBRITY_BIO_TEMPLATES = [
+    "",  # empty bio — very common for celebrities
+    "Official account",
+    "CEO of {company}",
+    "Founder & CEO | {company}",
+    "Actor. Director. Producer.",
+    "Professional athlete | {team}",
+    "Recording artist",
+    "Entrepreneur | Investor",
+    "Author of {book}",
+    "Public speaker | Activist",
+    "Politician | {role}",
+    "Journalist at {outlet}",
+    "Co-founder of {company}",
+    "Official account. For business: press@agency.com",
+    "Grammy-winning artist",
+    "Professional athlete | Brand ambassador",
+    "World-renowned chef | Cookbook author",
+    "CEO | Author | Speaker",
+    "Oscar-winning director",
+    "World #1 | Foundation: @AidFund",
+    "Fashion icon | Creative Director",
+    "Entrepreneur | Investor | Philanthropist",
+]
+
+# Real celebrities often use real name or simple handles
+CELEBRITY_USERNAME_PATTERNS = [
+    "therock", "cristiano", "kimkardashian", "kyliejenner", "leomessi",
+    "selenagomez", "justinbieber", "taylorswift", "beyonce", "arianagrande",
+    "neymarjr", "elonmusk", "billgates", "timc00k", "jeffbezos",
+    "nasa", "natgeo", "nike", "apple", "instagram",
+    "meta", "microsoft", "google", "amazon", "tesla",
+    "fcbarcelona", "realmadrid", "mancity", "nba", "nfl",
+    "bbc", "cnn", "nytimes", "theguardian", "reuters",
+]
+
 _LEGIT_BIOS = [
     "photographer | travel 📷", "software engineer @ Google",
     "mom of 3 | foodie", "fitness coach 💪 DM for training plans",
@@ -270,10 +307,41 @@ def _gen_instagram_fake(n: int) -> List[dict]:
     return rows
 
 
-def _gen_instagram_legit(n: int) -> List[dict]:
+def _gen_instagram_celebrity(n: int) -> List[dict]:
+    """Generate celebrity-tier legitimate Instagram profiles (500K–500M followers)."""
     rows = []
     for _ in range(n):
-        followers = int(np.clip(RNG.lognormal(6, 1.5), 100, 500000))
+        followers = int(np.clip(
+            RNG.lognormal(np.log(5_000_000), 1.5),
+            500_000, 500_000_000,
+        ))
+        following = int(RNG.integers(0, 2_001))       # celebrities follow very few people
+        posts = int(np.clip(RNG.lognormal(np.log(1_000), 1.0), 50, 10_000))
+        age = int(RNG.integers(1825, 7300))            # 5–20 year-old accounts
+        bio_template = _rng_sample(CELEBRITY_BIO_TEMPLATES, 1)[0]
+        rows.append({
+            "username":    _rng_sample(CELEBRITY_USERNAME_PATTERNS, 1)[0],
+            "followers":   followers,
+            "following":   following,
+            "posts":       posts,
+            "bio":         bio_template,
+            "is_verified": 1 if RNG.random() < 0.85 else 0,  # most but not all
+            "account_age_days": age,
+            "post_timestamps_json": _legit_timestamps(50, age),
+        })
+    return rows
+
+
+def _gen_instagram_legit(n: int) -> List[dict]:
+    """Generate legit Instagram profiles across casual/established/influencer tiers."""
+    rows = []
+    # 10% celebrity tier mixed in so the model sees this as legitimate
+    n_celeb = max(1, int(n * 0.10))
+    n_regular = n - n_celeb
+    rows.extend(_gen_instagram_celebrity(n_celeb))
+
+    for _ in range(n_regular):
+        followers = int(np.clip(RNG.lognormal(6, 1.5), 100, 500_000))
         following = int(np.clip(followers * RNG.uniform(0.3, 2.0), 50, 5000))
         posts = int(np.clip(RNG.lognormal(4, 1), 15, 3000))
         age = int(RNG.integers(180, 2000))
@@ -284,6 +352,7 @@ def _gen_instagram_legit(n: int) -> List[dict]:
             "posts": posts,
             "bio": _rng_sample(_LEGIT_BIOS, 1)[0],
             "is_verified": 1 if RNG.random() < 0.05 else 0,
+            "account_age_days": age,
             "post_timestamps_json": _legit_timestamps(50, age),
         })
     return rows
@@ -718,6 +787,21 @@ def _gen_snapchat_borderline_legit(n: int) -> List[dict]:
     return rows
 
 
+# Celebrity generators dispatch table
+# Platforms without a dedicated celebrity generator fall back to None (no supplement)
+_CELEBRITY_GENERATORS: dict = {
+    "instagram": _gen_instagram_celebrity,
+    "facebook":  None,
+    "x":         None,
+    "linkedin":  None,
+    "github":    None,
+    "discord":   None,
+    "youtube":   None,
+    "tiktok":    None,
+    "reddit":    None,
+    "snapchat":  None,
+}
+
 # Dispatch tables
 _FAKE_GENERATORS = {
     "instagram": _gen_instagram_fake,
@@ -895,6 +979,7 @@ def generate_dataset(
     fake_ratio: float = 0.3,
     add_noise: bool = True,
     realistic_mode: bool = True,
+    celebrity_ratio: float = 0.07,
 ) -> pd.DataFrame:
     """
     Generate a complete labeled dataset combining fake and legit profiles.
@@ -904,6 +989,10 @@ def generate_dataset(
       - 30% borderline legit (casual users, new accounts, sparse data)
       - 20% obvious fakes (bot patterns, spam)
       - 10% sophisticated fakes (semi-legit looking)
+
+    celebrity_ratio: fraction of total that should be celebrity-tier legit profiles.
+    These are generated in addition to the realistic-mode tiers and are critical for
+    teaching the model that extreme follower ratios can be legitimate.
 
     This distribution teaches the model that sparse/incomplete profiles are
     NOT automatically fake — addressing the core confidence calibration problem.
@@ -922,12 +1011,27 @@ def generate_dataset(
     if platform not in PLATFORMS:
         raise ValueError(f"Unsupported platform: {platform}")
 
+    # Celebrity supplement — generated separately and always included
+    n_celebrity = max(1, int(total_count * max(0.0, celebrity_ratio)))
+    celebrity_gen = _CELEBRITY_GENERATORS.get(platform)
+    if celebrity_gen and n_celebrity > 0:
+        celeb_rows = celebrity_gen(n_celebrity)
+        df_celebrity = pd.DataFrame(celeb_rows)
+        df_celebrity["label"] = 0
+        temporal_cols = _legit_temporal_cols(len(df_celebrity))
+        for col, vals in temporal_cols.items():
+            df_celebrity[col] = vals
+    else:
+        df_celebrity = None
+
     if realistic_mode:
+        # Adjust remaining count to account for celebrity supplement
+        remaining = max(10, total_count - (n_celebrity if celebrity_gen else 0))
         # 40% high-quality legit, 30% borderline legit, 20% obvious fakes, 10% sophisticated fakes
-        n_hq_legit = max(1, int(total_count * 0.40))
-        n_bl_legit = max(1, int(total_count * 0.30))
-        n_fake_obv = max(1, int(total_count * 0.20))
-        n_fake_soph = max(1, total_count - n_hq_legit - n_bl_legit - n_fake_obv)
+        n_hq_legit = max(1, int(remaining * 0.40))
+        n_bl_legit = max(1, int(remaining * 0.30))
+        n_fake_obv = max(1, int(remaining * 0.20))
+        n_fake_soph = max(1, remaining - n_hq_legit - n_bl_legit - n_fake_obv)
 
         df_hq_legit = generate_legit_profiles(platform, n_hq_legit)
 
@@ -946,20 +1050,28 @@ def generate_dataset(
         df_fake_obv = generate_fake_profiles(platform, n_fake_obv)
         df_fake_soph = generate_fake_profiles(platform, n_fake_soph)
 
-        df = pd.concat([df_hq_legit, df_bl_legit, df_fake_obv, df_fake_soph],
-                       ignore_index=True)
+        parts = [df_hq_legit, df_bl_legit, df_fake_obv, df_fake_soph]
+        if df_celebrity is not None:
+            parts.append(df_celebrity)
+        df = pd.concat(parts, ignore_index=True)
 
         logger.info(
-            "Realistic mode: platform=%s hq_legit=%d borderline=%d fake_obv=%d fake_soph=%d",
+            "Realistic mode: platform=%s hq_legit=%d borderline=%d "
+            "fake_obv=%d fake_soph=%d celebrity=%d",
             platform, n_hq_legit, n_bl_legit, n_fake_obv, n_fake_soph,
+            len(df_celebrity) if df_celebrity is not None else 0,
         )
     else:
-        # Legacy mode: simple fake/legit split
+        # Legacy mode: simple fake/legit split + celebrity supplement
         fake_count = max(1, int(total_count * fake_ratio))
-        legit_count = max(1, total_count - fake_count)
+        legit_count = max(1, total_count - fake_count
+                          - (n_celebrity if celebrity_gen else 0))
         df_fake = generate_fake_profiles(platform, fake_count)
         df_legit = generate_legit_profiles(platform, legit_count)
-        df = pd.concat([df_fake, df_legit], ignore_index=True)
+        parts = [df_fake, df_legit]
+        if df_celebrity is not None:
+            parts.append(df_celebrity)
+        df = pd.concat(parts, ignore_index=True)
 
     if add_noise:
         df = inject_realistic_noise(df)

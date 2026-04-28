@@ -88,7 +88,6 @@
     <div class="row g-3">
       {% for p in platforms %}
       {% set status = model_status[p] %}
-      {% set acc = platform_acc.get(p) %}
       <div class="col-6 col-md-4 col-lg-3 col-xl-2">
         <div class="border rounded-4 p-3 h-100 platform-card {% if status.exists %}trained{% endif %} position-relative">
           <!-- Platform header -->
@@ -115,16 +114,7 @@
             {% endif %}
           </div>
 
-          {% if acc is not none %}
-          <div class="mb-2">
-            <div class="d-flex justify-content-between small text-muted mb-1">
-              <span>Accuracy</span><span class="fw-semibold {% if acc >= 0.9 %}text-success{% elif acc >= 0.75 %}text-warning{% else %}text-danger{% endif %}">{{ "%.0f"|format(acc * 100) }}%</span>
-            </div>
-            <div class="progress" style="height:4px">
-              <div class="progress-bar {% if acc >= 0.9 %}bg-success{% elif acc >= 0.75 %}bg-warning{% else %}bg-danger{% endif %}" style="width:{{ (acc * 100)|round }}%"></div>
-            </div>
-          </div>
-          {% elif status.exists %}
+          {% if status.exists %}
             <div class="small text-muted mb-2">Trained {{ status.trained_at }}</div>
           {% else %}
             <div class="small text-muted mb-2">No model yet</div>

@@ -301,5 +301,159 @@ class TestConfidenceExplainer:
         assert result >= 0.0
 
 
+# ---------------------------------------------------------------------------
+# Celebrity safeguard tests
+# ---------------------------------------------------------------------------
+
+class TestCelebritySafeguard:
+    """
+    Rule-based safeguard layer must correctly override ML predictions
+    for celebrity/public figure patterns.
+    """
+
+    def test_verified_mega_celebrity_always_legit(self):
+        """Verified account with 1M+ followers must always be Legit regardless of ML."""
+        from prediction.celebrity_safeguard import apply_celebrity_safeguard
+
+        features = {"followers": 13_000_000, "following": 500, "posts": 1200,
+                    "is_verified": 1, "account_age_days": 4000}
+        result, conf, override, reason = apply_celebrity_safeguard(features, "Fake", 90.0)
+        assert result == "Legit", f"Expected Legit, got {result}"
+        assert conf >= 90.0
+        assert override is True
+        assert reason is not None
+
+    def test_mega_follower_with_posts_legit(self):
+        """10M+ followers + 100+ posts must be Legit."""
+        from prediction.celebrity_safeguard import apply_celebrity_safeguard
+
+        features = {"followers": 15_000_000, "following": 300, "posts": 500,
+                    "is_verified": 0, "account_age_days": 0}
+        result, conf, override, reason = apply_celebrity_safeguard(features, "Fake", 85.0)
+        assert result == "Legit"
+        assert override is True
+
+    def test_extreme_ratio_mature_account_legit(self):
+        """Extreme ratio + mature account + posts triggers override."""
+        from prediction.celebrity_safeguard import apply_celebrity_safeguard
+
+        features = {"followers": 2_000_000, "following": 400, "posts": 800,
+                    "is_verified": 0, "account_age_days": 2500}
+        result, conf, override, reason = apply_celebrity_safeguard(features, "Fake", 80.0)
+        assert result == "Legit"
+        assert override is True
+
+    def test_regular_user_not_overridden(self):
+        """Normal user with moderate followers should not trigger celebrity override."""
+        from prediction.celebrity_safeguard import apply_celebrity_safeguard
+
+        features = {"followers": 5_000, "following": 400, "posts": 200,
+                    "is_verified": 0, "account_age_days": 500}
+        result, conf, override, reason = apply_celebrity_safeguard(features, "Legit", 75.0)
+        assert override is False
+        assert result == "Legit"
+
+    def test_bot_safeguard_catches_new_mass_follower(self):
+        """Brand new account mass-following with no content should be flagged Fake."""
+        from prediction.celebrity_safeguard import apply_bot_safeguard
+
+        features = {"followers": 10, "following": 2000, "posts": 0,
+                    "account_age_days": 3}
+        result, conf, override, reason = apply_bot_safeguard(features, "Legit", 55.0)
+        assert result == "Fake"
+        assert override is True
+
+    def test_bot_safeguard_no_false_positive_on_celebrity(self):
+        """Celebrity with high followers but zero following should not be flagged by bot safeguard."""
+        from prediction.celebrity_safeguard import apply_bot_safeguard
+
+        features = {"followers": 10_000_000, "following": 200, "posts": 1000,
+                    "account_age_days": 3650}
+        result, conf, override, reason = apply_bot_safeguard(features, "Legit", 80.0)
+        assert override is False
+
+    def test_allowlist_returns_correct_format(self):
+        """check_public_figure_allowlist returns (bool, float|None)."""
+        from prediction.celebrity_safeguard import check_public_figure_allowlist
+
+        # Unknown user should not be on list
+        is_known, conf = check_public_figure_allowlist("totally_random_xyz_999", "instagram")
+        assert is_known is False
+        assert conf is None
+
+    def test_celebrity_features_log_followers(self):
+        """compute_celebrity_features returns correct log10(followers)."""
+        from features.celebrity_detector import compute_celebrity_features
+        import math
+
+        feats = compute_celebrity_features({"followers": 1_000_000, "following": 500})
+        assert abs(feats["celeb_log_followers"] - 6.0) < 0.01
+        assert feats["celeb_followers_tier"] == 5   # 1M → tier 5
+        assert feats["celeb_is_celebrity_scale"] == 1
+
+    def test_celebrity_features_handles_missing_values(self):
+        """compute_celebrity_features should work with empty input."""
+        from features.celebrity_detector import compute_celebrity_features
+
+        feats = compute_celebrity_features({})
+        assert "celeb_log_followers" in feats
+        assert feats["celeb_is_celebrity_scale"] == 0
+        assert feats["celeb_account_maturity_score"] == 0.1
+
+    def test_celebrity_features_verified_celebrity_flag(self):
+        """Verified + 100K+ followers must set celeb_verified_celebrity=1."""
+        from features.celebrity_detector import compute_celebrity_features
+
+        feats = compute_celebrity_features({"followers": 500_000, "is_verified": 1})
+        assert feats["celeb_verified_celebrity"] == 1
+        assert feats["celeb_verified_micro"] == 0
+
+
+class TestCelebrityProfilesClassifiedAsLegit:
+    """
+    End-to-end: celebrity-pattern feature sets should route through the safeguard
+    and produce a Legit classification with adequate confidence.
+
+    These tests validate the safeguard layer directly (not the ML model, since
+    the model requires a trained pkl file).
+    """
+
+    CELEBRITY_TEST_CASES = [
+        {
+            "name": "Mega celebrity — verified, extreme ratio",
+            "features": {"followers": 13_000_000, "following": 500, "posts": 1200,
+                         "is_verified": 1, "account_age_days": 4000},
+            "min_confidence": 90.0,
+        },
+        {
+            "name": "Large public figure — unverified but high follower",
+            "features": {"followers": 2_500_000, "following": 800, "posts": 3400,
+                         "is_verified": 0, "account_age_days": 3650},
+            "min_confidence": 85.0,
+        },
+        {
+            "name": "Brand account — high followers, minimal following",
+            "features": {"followers": 8_000_000, "following": 200, "posts": 4200,
+                         "is_verified": 1, "account_age_days": 5000},
+            "min_confidence": 90.0,
+        },
+    ]
+
+    def test_all_celebrity_cases_classified_legit(self):
+        from prediction.celebrity_safeguard import apply_celebrity_safeguard
+
+        for case in self.CELEBRITY_TEST_CASES:
+            result, conf, override, reason = apply_celebrity_safeguard(
+                case["features"], "Fake", 85.0
+            )
+            assert result == "Legit", (
+                f"FAIL [{case['name']}]: Got {result} (expected Legit)"
+            )
+            assert conf >= case["min_confidence"], (
+                f"FAIL [{case['name']}]: Confidence {conf:.1f}% < {case['min_confidence']}%"
+            )
+            assert override is True, f"FAIL [{case['name']}]: Override should be True"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

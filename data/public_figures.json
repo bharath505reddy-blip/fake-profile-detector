@@ -1,0 +1,35 @@
+{
+  "instagram": [
+    "zuck", "cristiano", "kyliejenner", "therock", "kimkardashian",
+    "leomessi", "selenagomez", "beyonce", "arianagrande", "justinbieber",
+    "natgeo", "nasa", "instagram", "nike", "apple", "microsoft", "meta",
+    "taylorswift", "neymarjr", "katy.perry", "rihanna", "priyankachopra",
+    "virat.kohli", "championsleague", "fcbarcelona", "realmadrid"
+  ],
+  "x": [
+    "elonmusk", "barackobama", "justinbieber", "katyperry", "rihanna",
+    "taylorswift13", "nasa", "whitehouse", "un", "who",
+    "billgates", "tim_cook", "sundarpichai", "satyanadella",
+    "realdonaldtrump", "joebiden", "bbc", "cnn", "nytimes", "guardian"
+  ],
+  "facebook": [
+    "zuck", "shakira", "cristiano", "therock", "microsoft",
+    "nasa", "natgeo", "nike", "apple", "samsung"
+  ],
+  "github": [
+    "torvalds", "gvanrossum", "dhh", "tj", "yyx990803", "sindresorhus",
+    "antirez", "kennethreitz", "nicowillis", "jeresig"
+  ],
+  "youtube": [
+    "pewdiepie", "tseries", "cocomelon", "mrbeast", "markiplier",
+    "youtube", "google", "nasa", "ted", "tedx"
+  ],
+  "tiktok": [
+    "charlidamelio", "addisonre", "bellapoarch", "khaby.lame",
+    "zachking", "willsmith", "therock", "mrbeast", "nasa"
+  ],
+  "reddit": [],
+  "linkedin": [],
+  "discord": [],
+  "snapchat": []
+}

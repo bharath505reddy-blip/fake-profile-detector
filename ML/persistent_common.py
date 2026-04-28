@@ -28,6 +28,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import RobustScaler
 from sklearn.impute import SimpleImputer
 from sklearn.calibration import CalibratedClassifierCV
+from sklearn.base import BaseEstimator, TransformerMixin
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,84 @@ except Exception:
 
 LABEL_COLUMNS = ["label", "is_fake", "fake", "target", "is_bot", "bot"]
 RF_ESTIMATORS = 300
+
+# ---------------------------------------------------------------------------
+# Log-transform preprocessor — fixes celebrity outlier clipping
+# ---------------------------------------------------------------------------
+
+# Features with power-law distributions that need log1p before scaling.
+# Raw followers/following for celebrity accounts (10M+) get clipped by
+# RobustScaler when trained on regular users. Log-transforming first
+# preserves the information at the high end of the distribution.
+LOG_TRANSFORM_FEATURES = {
+    "followers", "following", "posts", "tweets", "subscribers",
+    "total_views", "snap_score", "post_karma", "comment_karma",
+    "total_likes", "total_stars", "listed_count", "friends",
+    "videos", "likes",
+}
+
+
+class LogRobustScaler(BaseEstimator, TransformerMixin):
+    """
+    Two-phase preprocessing: log1p-transform power-law columns, then RobustScaler.
+
+    Avoids clipping celebrity-tier accounts (10M+ followers) that RobustScaler
+    would treat as outliers when trained on regular-user distributions.
+    Skips columns already log-transformed by feature builders (log_* prefix).
+    """
+
+    def fit(self, X, y=None):
+        if hasattr(X, "columns"):
+            self.log_col_indices_ = [
+                i for i, col in enumerate(X.columns)
+                if col.lower() in LOG_TRANSFORM_FEATURES
+                and not col.lower().startswith("log_")
+            ]
+        else:
+            self.log_col_indices_ = []
+        self.scaler_ = RobustScaler(with_centering=False)
+        self.scaler_.fit(self._apply_log(X))
+        return self
+
+    def transform(self, X):
+        return self.scaler_.transform(self._apply_log(X))
+
+    def _apply_log(self, X):
+        if hasattr(X, "values"):
+            arr = X.values.copy().astype(float)
+        else:
+            arr = np.array(X, dtype=float).copy()
+        for idx in self.log_col_indices_:
+            arr[:, idx] = np.log1p(np.maximum(arr[:, idx], 0))
+        return arr
+
+
+def build_preprocessor(feature_names: list) -> "Pipeline":
+    """
+    Build a ColumnTransformer-based preprocessing pipeline when feature names
+    are known ahead of time. Applies log1p + RobustScaler to power-law features
+    and plain RobustScaler to everything else.
+
+    Use LogRobustScaler when feature names are unknown at model-build time.
+    """
+    from sklearn.compose import ColumnTransformer
+    from sklearn.preprocessing import FunctionTransformer
+
+    log_cols = [f for f in feature_names
+                if f.lower() in LOG_TRANSFORM_FEATURES
+                and not f.lower().startswith("log_")]
+    other_cols = [f for f in feature_names if f not in log_cols]
+
+    log_pipe = Pipeline([
+        ("log",    FunctionTransformer(lambda x: np.log1p(np.maximum(x, 0)), validate=True)),
+        ("scaler", RobustScaler()),
+    ])
+
+    transformers = [("log_transform", log_pipe, log_cols)] if log_cols else []
+    if other_cols:
+        transformers.append(("standard_scale", RobustScaler(), other_cols))
+
+    return ColumnTransformer(transformers, remainder="passthrough")
 
 # Feature group weights — applied as column multipliers after RobustScaler.
 # Higher weight = feature group has more influence on the model.
@@ -304,9 +383,9 @@ def default_model(tuned_params: Optional[dict] = None) -> Pipeline:
     ensemble = VotingClassifier(estimators=estimators, voting="soft")
 
     return Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", RobustScaler(with_centering=False)),
-        ("ensemble", ensemble),
+        ("imputer",      SimpleImputer(strategy="median")),
+        ("preprocessor", LogRobustScaler()),
+        ("ensemble",     ensemble),
     ])
 
 
@@ -402,9 +481,9 @@ def stacking_model(tuned_params: Optional[dict] = None) -> Pipeline:
     )
 
     return Pipeline([
-        ("imputer", SimpleImputer(strategy="median")),
-        ("scaler", RobustScaler(with_centering=False)),
-        ("ensemble", stacking),
+        ("imputer",      SimpleImputer(strategy="median")),
+        ("preprocessor", LogRobustScaler()),
+        ("ensemble",     stacking),
     ])
 
 
@@ -825,6 +904,19 @@ def train_and_save(
     model_path.parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(model, model_path)
 
+    # --- Save feature names alongside the model ---
+    # This JSON file lets predict_with_saved_model align new feature columns
+    # to exactly what the model was trained on, preventing sklearn ValueError
+    # when new features (e.g. celeb_*) are added after a model was trained.
+    try:
+        features_json_path = model_path.with_suffix(".features.json")
+        with open(features_json_path, "w") as _fj:
+            json.dump(list(X_train_w.columns), _fj)
+        logger.info("[%s] Feature names saved: %s (%d features)",
+                    platform, features_json_path.name, len(X_train_w.columns))
+    except Exception as _fj_exc:
+        logger.warning("[%s] Could not save feature names JSON: %s", platform, _fj_exc)
+
     # --- Fit and save confidence calibrator ---
     try:
         from ML.confidence_calibrator import RobustConfidenceCalibrator
@@ -884,6 +976,83 @@ def train_and_save(
     return True, msg, metrics, len(X_train)
 
 
+def _load_trained_feature_names(model_path: Path) -> Optional[List[str]]:
+    """
+    Return the ordered feature name list the model was trained on, or None.
+
+    Priority:
+    1. <model>.features.json  — written by train_and_save() (most reliable)
+    2. model.named_steps['imputer'].feature_names_in_  — sklearn >= 1.0
+    3. model.feature_names_in_  — some estimator types
+    """
+    # 1. JSON sidecar
+    json_path = model_path.with_suffix(".features.json")
+    if json_path.exists():
+        try:
+            with open(json_path) as f:
+                names = json.load(f)
+            if isinstance(names, list) and names:
+                return names
+        except Exception as exc:
+            logger.warning("Could not read %s: %s", json_path.name, exc)
+
+    # 2. Extract from sklearn pipeline steps
+    try:
+        model = joblib.load(model_path)
+        for step_name in ("imputer", "preprocessor", "scaler"):
+            step = model.named_steps.get(step_name)
+            if step is not None and hasattr(step, "feature_names_in_"):
+                names = list(step.feature_names_in_)
+                if names:
+                    return names
+        if hasattr(model, "feature_names_in_"):
+            return list(model.feature_names_in_)
+    except Exception as exc:
+        logger.warning("Could not extract feature names from model: %s", exc)
+
+    return None
+
+
+def _align_to_trained_features(
+    X: pd.DataFrame,
+    trained_features: Optional[List[str]],
+    context: str = "",
+) -> pd.DataFrame:
+    """
+    Align X to exactly the columns the model was trained on.
+
+    - Adds missing columns as NaN (the pipeline's imputer will fill them).
+    - Drops any extra columns the model doesn't know (e.g. new celeb_* on old models).
+    - Reorders columns to match training order.
+
+    Logs a WARNING (not ERROR) when columns are dropped — expected when predicting
+    with an old model before retraining with new features.
+    """
+    if trained_features is None:
+        return X
+
+    # Add missing columns as NaN
+    for col in trained_features:
+        if col not in X.columns:
+            X = X.copy()
+            X[col] = np.nan
+
+    # Drop extra columns
+    extra = [c for c in X.columns if c not in trained_features]
+    if extra:
+        logger.warning(
+            "%sDropping %d feature(s) unknown to saved model: %s%s",
+            f"[{context}] " if context else "",
+            len(extra),
+            extra[:5],
+            "..." if len(extra) > 5 else "",
+        )
+        X = X.drop(columns=extra)
+
+    # Reorder to training order
+    return X[trained_features]
+
+
 def predict_with_saved_model(
     df: pd.DataFrame,
     model_path: Path,
@@ -911,6 +1080,16 @@ def predict_with_saved_model(
 
     # Apply the same feature group weights used at training time
     X_w = apply_feature_group_weights(X)
+
+    # ── Feature alignment — fixes celeb_* mismatch on old models ─────────
+    # Old models (.pkl files trained before celeb_* features were added) will
+    # raise ValueError if we send them columns they've never seen.
+    # We align X_w (and X for SHAP) to exactly what the model was trained on.
+    platform_name = platform_from_path(model_path)
+    trained_features = _load_trained_feature_names(model_path)
+    X_w = _align_to_trained_features(X_w, trained_features, context=platform_name)
+    X   = _align_to_trained_features(X,   trained_features, context=platform_name)
+    # ── End feature alignment ─────────────────────────────────────────────
 
     preds = model.predict(X_w)
     df_norm["prediction"] = pd.Series(preds, index=df_norm.index).map(

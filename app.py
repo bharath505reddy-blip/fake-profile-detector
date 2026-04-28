@@ -837,6 +837,9 @@ def manual_predict(platform: str):
     bio_features = None
     photo_features = None
     confidence_explanation = None
+    override_applied = False
+    override_reason = None
+    is_known_figure = False
 
     # Check API key configuration for this platform
     try:
@@ -900,6 +903,42 @@ def manual_predict(platform: str):
         shap_chart = chart_files.get("shap_single", "")
         analysis_depth = "manual_comprehensive"
 
+        # ── Celebrity / public figure safeguards ──────────────────────────────
+        try:
+            from prediction.celebrity_safeguard import (
+                apply_celebrity_safeguard,
+                apply_bot_safeguard,
+                check_public_figure_allowlist,
+            )
+            uname_for_check = (
+                mapped.get("username") or mapped.get("name")
+                or mapped.get("channel_name") or ""
+            )
+
+            # 1. Allowlist check — highest priority
+            is_known_figure, kf_conf = check_public_figure_allowlist(
+                uname_for_check, platform
+            )
+            if is_known_figure and kf_conf is not None:
+                result = "Legit"
+                confidence = kf_conf
+                override_applied = True
+                override_reason = (
+                    "This account is on the known public figures list for this platform."
+                )
+            else:
+                # 2. Celebrity safeguard
+                result, confidence, override_applied, override_reason = (
+                    apply_celebrity_safeguard(filled, result, confidence or 50.0)
+                )
+                # 3. Bot safeguard (only if celebrity safeguard didn't fire)
+                if not override_applied:
+                    result, confidence, override_applied, override_reason = (
+                        apply_bot_safeguard(filled, result, confidence or 50.0)
+                    )
+        except Exception as _sg_exc:
+            logger.debug("Safeguard layer failed: %s", _sg_exc)
+
         if confidence is not None:
             try:
                 from prediction.tiered_predictor import confidence_label as _conf_label
@@ -940,22 +979,27 @@ def manual_predict(platform: str):
             except Exception:
                 pass
 
-        # Audit log
+        # Audit log — override info stored in features_json
         try:
             uname = (
                 mapped.get("username") or mapped.get("name")
                 or mapped.get("channel_name") or ""
             )
+            log_payload = {
+                k: v for k, v in mapped.items()
+                if not isinstance(v, (dict, list))
+            }
+            if override_applied:
+                log_payload["_override_applied"] = True
+                log_payload["_override_reason"] = override_reason or ""
+                log_payload["_is_known_figure"] = is_known_figure
             db.session.add(PredictionLog(
                 username=uname[:255],
                 platform=platform,
                 prediction=result,
                 confidence=confidence,
                 analysis_depth="manual_comprehensive",
-                features_json=json.dumps(
-                    {k: v for k, v in mapped.items() if not isinstance(v, (dict, list))},
-                    default=str,
-                )[:65535],
+                features_json=json.dumps(log_payload, default=str)[:65535],
             ))
             db.session.commit()
         except Exception as exc:
@@ -984,6 +1028,9 @@ def manual_predict(platform: str):
         data_coverage=data_coverage,
         fields_filled=fields_filled,
         fields_total=fields_total,
+        override_applied=override_applied,
+        override_reason=override_reason,
+        is_known_figure=is_known_figure,
     )
 
 
@@ -2716,6 +2763,119 @@ def admin_recalibrate(platform: str):
     except Exception as exc:
         logger.exception("Recalibration failed for %s", platform)
         return jsonify({"ok": False, "message": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Error handlers
+# ---------------------------------------------------------------------------
+
+@app.errorhandler(500)
+def internal_error(error):
+    import traceback
+    tb = traceback.format_exc()
+    logger.error("500 error: %s", tb)
+    if app.debug:
+        return (
+            f'<div style="font-family:monospace;padding:20px;background:#1e1e1e;'
+            f'color:#f44;max-width:900px;margin:20px auto;border-radius:8px">'
+            f'<h2 style="color:#ff6b6b">&#9888; Internal Server Error</h2>'
+            f'<pre style="color:#ffa;white-space:pre-wrap;font-size:12px">{tb}</pre></div>',
+            500,
+        )
+    return render_template(
+        "error.html",
+        error_title="Something went wrong",
+        error_message="An internal error occurred. Check server logs for details.",
+        error_hint="If this happened during prediction, retrain the model at /train/<platform>.",
+    ), 500
+
+
+@app.errorhandler(ValueError)
+def value_error_handler(error):
+    """Catch sklearn feature-mismatch errors with a user-friendly message."""
+    import traceback
+    tb = traceback.format_exc()
+    logger.error("ValueError in prediction: %s", error)
+
+    error_str = str(error)
+    if "feature names should match" in error_str.lower():
+        hint = (
+            "The saved model was trained with a different feature set. "
+            "Retrain the model at /train/<platform> to pick up the latest features."
+        )
+    else:
+        hint = error_str
+
+    if app.debug:
+        return (
+            f'<div style="font-family:monospace;padding:20px;background:#1e1e1e;'
+            f'color:#f44;max-width:900px;margin:20px auto;border-radius:8px">'
+            f'<h2 style="color:#ff6b6b">&#9888; Feature Mismatch</h2>'
+            f'<p style="color:#aaa">{hint}</p>'
+            f'<pre style="color:#ffa;white-space:pre-wrap;font-size:12px">{tb}</pre></div>',
+            500,
+        )
+    return render_template(
+        "error.html",
+        error_title="Model Feature Mismatch",
+        error_message=hint,
+        error_hint="Go to /train/<platform> and retrain the model.",
+    ), 500
+
+
+# ---------------------------------------------------------------------------
+# Admin: Known Public Figures Allowlist
+# ---------------------------------------------------------------------------
+
+@app.route("/admin/public-figures", methods=["GET", "POST"])
+@login_required
+def admin_public_figures():
+    """Edit the known public figures allowlist per platform."""
+    if not current_user.is_admin:
+        flash("Admin access required.", "danger")
+        return redirect(url_for("index"))
+
+    from prediction.celebrity_safeguard import load_allowlist, save_allowlist
+
+    allowlist = load_allowlist()
+
+    # Ensure every platform key exists
+    for p in PLATFORMS:
+        allowlist.setdefault(p, [])
+
+    if request.method == "POST":
+        action   = request.form.get("action", "")
+        platform = request.form.get("platform", "").lower()
+        username = (request.form.get("username") or "").strip().lower()
+
+        if platform not in PLATFORMS:
+            flash("Unknown platform.", "danger")
+        elif not username:
+            flash("Username cannot be empty.", "danger")
+        elif action == "add":
+            if username not in [u.lower() for u in allowlist.get(platform, [])]:
+                allowlist.setdefault(platform, []).append(username)
+                save_allowlist(allowlist)
+                flash(f"Added '{username}' to {platform} allowlist.", "success")
+            else:
+                flash(f"'{username}' is already in the {platform} allowlist.", "info")
+        elif action == "remove":
+            allowlist[platform] = [
+                u for u in allowlist.get(platform, [])
+                if u.lower() != username
+            ]
+            save_allowlist(allowlist)
+            flash(f"Removed '{username}' from {platform} allowlist.", "success")
+        else:
+            flash("Unknown action.", "danger")
+
+        return redirect(url_for("admin_public_figures"))
+
+    return render_template(
+        "admin_public_figures.html",
+        allowlist=allowlist,
+        platforms=PLATFORMS,
+    )
 
 
 if __name__ == "__main__":

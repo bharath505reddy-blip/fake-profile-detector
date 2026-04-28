@@ -3,6 +3,12 @@ import numpy as np
 import pandas as pd
 from .persistent_common import normalize_columns, safe_num, add_text_features
 
+try:
+    from features.celebrity_detector import compute_celebrity_features
+    _CELEB_AVAILABLE = True
+except Exception:
+    _CELEB_AVAILABLE = False
+
 
 def build_tiktok_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]:
     df = normalize_columns(df)
@@ -58,5 +64,16 @@ def build_tiktok_features(df: pd.DataFrame) -> Tuple[pd.DataFrame, pd.DataFrame]
         "bio_has_spam", "bio_emoji_count", "bio_is_empty",
     ]
 
-    X = df[feature_cols]
+    X = df[feature_cols].copy()
+
+    if _CELEB_AVAILABLE:
+        try:
+            celeb_rows = [compute_celebrity_features(row.to_dict())
+                          for _, row in df.iterrows()]
+            celeb_df = pd.DataFrame(celeb_rows, index=df.index)
+            for col in celeb_df.columns:
+                X[col] = celeb_df[col].values
+        except Exception:
+            pass
+
     return X, df
