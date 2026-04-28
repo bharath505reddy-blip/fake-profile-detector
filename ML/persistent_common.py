@@ -1089,6 +1089,20 @@ def predict_with_saved_model(
     trained_features = _load_trained_feature_names(model_path)
     X_w = _align_to_trained_features(X_w, trained_features, context=platform_name)
     X   = _align_to_trained_features(X,   trained_features, context=platform_name)
+
+    # Warn the user when a large fraction of expected features are NaN-filled
+    # (indicates the uploaded CSV format doesn't match what the model was trained on)
+    if trained_features:
+        missing_feats = [c for c in trained_features if X_w[c].isna().all()]
+        if len(missing_feats) > max(1, len(trained_features) * 0.25):
+            warnings.append(
+                f"{len(missing_feats)} of {len(trained_features)} feature columns "
+                f"are missing from this CSV and were filled with training defaults "
+                f"({', '.join(missing_feats[:4])}{'…' if len(missing_feats) > 4 else ''}). "
+                f"The CSV format may not match what this model was trained on — "
+                f"predictions may be less accurate. Consider retraining the model on "
+                f"data in this format."
+            )
     # ── End feature alignment ─────────────────────────────────────────────
 
     preds = model.predict(X_w)
@@ -1197,3 +1211,61 @@ def get_dataset_statistics(df: pd.DataFrame, feature_builder, platform: str) -> 
             "median": round(float(s.median()), 3),
         }
     return stats
+
+
+def compute_accuracy_on_csv(df_pred: pd.DataFrame, label_col: str) -> Optional[dict]:
+    """
+    Compare batch predictions in df_pred against true labels in label_col.
+
+    df_pred must contain both a 'prediction' column ('Fake'/'Legit'/'Uncertain')
+    and the true-label column identified by label_col.  'Uncertain' predictions
+    are excluded from the accuracy calculation.
+
+    Returns a dict with accuracy/precision/recall/F1 (as percentages 0-100),
+    confusion matrix, and per-class counts — or None if not enough labeled rows.
+    """
+    from sklearn.metrics import (
+        accuracy_score, precision_score, recall_score,
+        f1_score, confusion_matrix,
+    )
+
+    if "prediction" not in df_pred.columns or label_col not in df_pred.columns:
+        return None
+
+    y_true = coerce_label_binary(df_pred[label_col]).dropna()
+    if len(y_true) < 2 or y_true.nunique() < 2:
+        return None
+
+    y_pred_str = df_pred.loc[y_true.index, "prediction"]
+    y_pred = y_pred_str.map({"Fake": 1, "Legit": 0})  # Uncertain → NaN → dropped
+
+    certain = y_pred.notna()
+    y_true = y_true[certain].astype(int)
+    y_pred = y_pred[certain].astype(int)
+
+    if len(y_true) < 2:
+        return None
+
+    logging.getLogger(__name__).info(
+        "Computing accuracy on %d labeled rows (true_fake=%d true_legit=%d)",
+        len(y_true), int((y_true == 1).sum()), int((y_true == 0).sum()),
+    )
+
+    acc  = accuracy_score(y_true, y_pred)
+    prec = precision_score(y_true, y_pred, zero_division=0)
+    rec  = recall_score(y_true, y_pred, zero_division=0)
+    f1   = f1_score(y_true, y_pred, zero_division=0)
+    cm   = confusion_matrix(y_true, y_pred, labels=[0, 1]).tolist()
+
+    return {
+        "accuracy":              round(acc  * 100, 1),
+        "precision":             round(prec * 100, 1),
+        "recall":                round(rec  * 100, 1),
+        "f1":                    round(f1   * 100, 1),
+        "confusion_matrix":      cm,
+        "total":                 len(y_true),
+        "true_fake_count":       int((y_true == 1).sum()),
+        "true_legit_count":      int((y_true == 0).sum()),
+        "predicted_fake_count":  int((y_pred == 1).sum()),
+        "predicted_legit_count": int((y_pred == 0).sum()),
+    }

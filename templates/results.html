@@ -46,6 +46,48 @@
         </div>
         {% endif %}
 
+        {% if accuracy_metrics %}
+        <!-- Accuracy metrics — shown only when uploaded CSV contained a label column -->
+        <div class="card border-0 bg-light rounded-3 mb-3 p-3">
+          <div class="small fw-semibold text-uppercase text-muted mb-2">
+            <i class="bi bi-bullseye me-1"></i>Accuracy vs True Labels
+          </div>
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="small text-muted">Accuracy</span>
+            <span class="fw-bold {% if accuracy_metrics.accuracy >= 90 %}text-success{% elif accuracy_metrics.accuracy >= 70 %}text-warning{% else %}text-danger{% endif %}">
+              {{ accuracy_metrics.accuracy }}%
+            </span>
+          </div>
+          <div class="progress mb-2" style="height:6px">
+            <div class="progress-bar {% if accuracy_metrics.accuracy >= 90 %}bg-success{% elif accuracy_metrics.accuracy >= 70 %}bg-warning{% else %}bg-danger{% endif %}"
+                 style="width:{{ accuracy_metrics.accuracy }}%"></div>
+          </div>
+          <div class="row g-1 text-center small">
+            <div class="col-4">
+              <div class="text-muted" style="font-size:0.7rem">Precision</div>
+              <div class="fw-semibold">{{ accuracy_metrics.precision }}%</div>
+            </div>
+            <div class="col-4">
+              <div class="text-muted" style="font-size:0.7rem">Recall</div>
+              <div class="fw-semibold">{{ accuracy_metrics.recall }}%</div>
+            </div>
+            <div class="col-4">
+              <div class="text-muted" style="font-size:0.7rem">F1</div>
+              <div class="fw-semibold">{{ accuracy_metrics.f1 }}%</div>
+            </div>
+          </div>
+          <hr class="my-2">
+          <div class="small text-muted">
+            True: {{ accuracy_metrics.true_fake_count }} fake / {{ accuracy_metrics.true_legit_count }} legit<br>
+            Predicted: {{ accuracy_metrics.predicted_fake_count }} fake / {{ accuracy_metrics.predicted_legit_count }} legit
+          </div>
+        </div>
+        {% else %}
+        <div class="small text-muted mb-3 fst-italic">
+          <i class="bi bi-info-circle me-1"></i>Upload a CSV with a <code>label</code> column to see accuracy metrics.
+        </div>
+        {% endif %}
+
         <!-- Confidence threshold slider -->
         <div class="mb-3">
           <label class="form-label small text-muted d-flex justify-content-between">

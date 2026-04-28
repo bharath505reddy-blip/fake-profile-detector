@@ -20,6 +20,8 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 
+from ML.config import LABEL_COLUMN, FAKE_VALUE, LEGIT_VALUE
+
 logger = logging.getLogger(__name__)
 
 RNG = np.random.default_rng(42)
@@ -865,7 +867,7 @@ def inject_realistic_noise(df: pd.DataFrame, missing_rate: float = 0.15) -> pd.D
     """
     df = df.copy()
     num_cols = [c for c in df.select_dtypes(include=[np.number]).columns
-                if c not in ("label", "is_fake", "fake", "target")]
+                if c not in (LABEL_COLUMN, "is_fake", "fake", "target")]
 
     n_rows = len(df)
 
@@ -891,7 +893,9 @@ def inject_realistic_noise(df: pd.DataFrame, missing_rate: float = 0.15) -> pd.D
                 df.loc[valid_idx, col] = (df.loc[valid_idx, col] + noise).clip(lower=0)
 
     # Flip ~2% of labels (label noise prevents overfit)
-    label_col = next((c for c in ("label", "is_fake", "fake", "target") if c in df.columns), None)
+    label_col = next(
+        (c for c in (LABEL_COLUMN, "is_fake", "fake", "target") if c in df.columns), None
+    )
     if label_col:
         n_flip = max(1, int(n_rows * 0.02))
         flip_idx = RNG.choice(n_rows, n_flip, replace=False)
@@ -926,7 +930,7 @@ def generate_fake_profiles(platform: str, count: int) -> pd.DataFrame:
 
     rows = _FAKE_GENERATORS[platform](count)
     df = pd.DataFrame(rows)
-    df["label"] = 1
+    df[LABEL_COLUMN] = FAKE_VALUE
 
     # Add temporal feature columns
     temporal_cols = _fake_temporal_cols(len(df))
@@ -962,7 +966,7 @@ def generate_legit_profiles(platform: str, count: int) -> pd.DataFrame:
 
     rows = _LEGIT_GENERATORS[platform](count)
     df = pd.DataFrame(rows)
-    df["label"] = 0
+    df[LABEL_COLUMN] = LEGIT_VALUE
 
     # Add temporal feature columns
     temporal_cols = _legit_temporal_cols(len(df))
@@ -1017,7 +1021,7 @@ def generate_dataset(
     if celebrity_gen and n_celebrity > 0:
         celeb_rows = celebrity_gen(n_celebrity)
         df_celebrity = pd.DataFrame(celeb_rows)
-        df_celebrity["label"] = 0
+        df_celebrity[LABEL_COLUMN] = LEGIT_VALUE
         temporal_cols = _legit_temporal_cols(len(df_celebrity))
         for col, vals in temporal_cols.items():
             df_celebrity[col] = vals
@@ -1040,7 +1044,7 @@ def generate_dataset(
         if bl_gen:
             bl_rows = bl_gen(n_bl_legit)
             df_bl_legit = pd.DataFrame(bl_rows)
-            df_bl_legit["label"] = 0
+            df_bl_legit[LABEL_COLUMN] = LEGIT_VALUE
             temporal_cols = _legit_temporal_cols(len(df_bl_legit))
             for col, vals in temporal_cols.items():
                 df_bl_legit[col] = vals
@@ -1078,7 +1082,7 @@ def generate_dataset(
 
     df = df.sample(frac=1, random_state=42).reset_index(drop=True)
 
-    actual_fake = int(df["label"].sum())
+    actual_fake = int(df[LABEL_COLUMN].sum())
     actual_legit = len(df) - actual_fake
     logger.info(
         "Generated dataset: platform=%s total=%d fake=%d legit=%d fake_ratio=%.2f",
@@ -1119,7 +1123,7 @@ def get_generation_stats(df: pd.DataFrame) -> dict:
         Dict with: total, fake_count, legit_count, fake_ratio, column_count.
     """
     total = len(df)
-    fake_count = int(df["label"].sum()) if "label" in df.columns else 0
+    fake_count = int(df[LABEL_COLUMN].sum()) if LABEL_COLUMN in df.columns else 0
     legit_count = total - fake_count
     return {
         "total": total,

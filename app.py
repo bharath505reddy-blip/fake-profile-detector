@@ -29,6 +29,9 @@ from ML.persistent_common import (
     get_dataset_statistics,
     detect_anomalies,
     save_dataset_stats_charts,
+    find_label_col,
+    coerce_label_binary,
+    compute_accuracy_on_csv,
     FEATURE_DESCRIPTIONS,
     SHAP_AVAILABLE,
     XGBOOST_AVAILABLE,
@@ -703,6 +706,15 @@ def results(platform: str):
     legit_count = int(counts.get("Legit", 0))
     uncertain_count = int(counts.get("Uncertain", 0))
 
+    # Compute accuracy metrics when the uploaded CSV contained true labels
+    accuracy_metrics = None
+    label_col = find_label_col(df)
+    if label_col:
+        try:
+            accuracy_metrics = compute_accuracy_on_csv(df, label_col)
+        except Exception as _acc_exc:
+            logger.warning("Accuracy computation failed: %s", _acc_exc)
+
     rows = df.head(TABLE_PREVIEW_ROWS).to_dict(orient="records")
     columns = list(df.columns)
     total_rows = len(df)
@@ -731,6 +743,7 @@ def results(platform: str):
         fake_count=fake_count,
         legit_count=legit_count,
         uncertain_count=uncertain_count,
+        accuracy_metrics=accuracy_metrics,
         columns=columns,
         rows=rows,
         total_rows=total_rows,
