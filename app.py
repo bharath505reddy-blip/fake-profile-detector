@@ -328,6 +328,7 @@ PLATFORM_ICONS = {
 LIVE_LOOKUP_PLATFORMS = {
     "github", "reddit", "twitter", "x", "instagram",
     "linkedin", "youtube", "discord", "tiktok",
+    "facebook", "snapchat",
 }
 
 # ---------------------------------------------------------------------------
@@ -1649,257 +1650,92 @@ def export_excel(platform: str, result_file: str):
 
 
 # ---------------------------------------------------------------------------
-# Live API Lookup
+# Live API Lookup (Unified)
 # ---------------------------------------------------------------------------
 
 @csrf.exempt
-@app.route("/api/live/github/<username>")
-def live_github(username: str):
-    if not HTTP_REQUESTS_AVAILABLE:
-        return jsonify({"error": "requests library not installed"}), 500
+@app.route("/api/live/<platform>/<identifier>")
+@app.route("/api/v1/live/<platform>/<identifier>")
+def live_lookup_unified(platform: str, identifier: str):
+    """
+    Unified live enrichment endpoint for all platforms.
+    """
+    platform = platform.lower()
     try:
-        headers = {"User-Agent": "FakeProfileDetector/1.0", "Accept": "application/vnd.github.v3+json"}
-        token = os.environ.get("GITHUB_TOKEN")
-        if token:
-            headers["Authorization"] = f"token {token}"
-        resp = http_requests.get(
-            f"https://api.github.com/users/{username}",
-            headers=headers, timeout=8
-        )
-        if resp.status_code == 404:
-            return jsonify({"error": "User not found"}), 404
-        if resp.status_code != 200:
-            return jsonify({"error": f"GitHub API error: {resp.status_code}"}), resp.status_code
-        data = resp.json()
-        # Compute account age from created_at
-        created_at_str = data.get("created_at", "")
-        account_age_days = 0
-        if created_at_str:
-            try:
-                from datetime import datetime, timezone
-                created = datetime.fromisoformat(created_at_str.replace("Z", "+00:00"))
-                account_age_days = (datetime.now(timezone.utc) - created).days
-            except Exception:
-                pass
-        return jsonify({
-            "username": data.get("login", ""),
-            "followers": data.get("followers", 0),
-            "following": data.get("following", 0),
-            "public_repos": data.get("public_repos", 0),
-            "public_gists": data.get("public_gists", 0),
-            "account_age_days": account_age_days,
-            "bio": data.get("bio") or "",
-            "created_at": created_at_str,
-            "avatar_url": data.get("avatar_url", ""),
-            "name": data.get("name", ""),
-        })
-    except http_requests.Timeout:
-        return jsonify({"error": "GitHub API timeout"}), 504
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+        from live_enrichment import enrich_profile
+        result = enrich_profile(platform, identifier)
+        
+        # Ensure standard top-level fields for JS auto-fill
+        result.setdefault("platform", platform)
+        result.setdefault("username", identifier)
+        result.setdefault("name", identifier)
+        result.setdefault("followers", None)
+        result.setdefault("following", None)
+        result.setdefault("posts", None)
+        result.setdefault("bio", "")
+        result.setdefault("is_verified", False)
+        result.setdefault("has_avatar", False)
+        result.setdefault("avatar_url", None)
+        result.setdefault("account_age_days", None)
+        result.setdefault("location", None)
+        result.setdefault("website", None)
+        result.setdefault("completeness", result.get("data_completeness_score", 0.0))
+        result.setdefault("error", None)
 
+        # Return 200 even if there is an enrichment error, as long as the router ran.
+        # This allows the frontend to display the error message gracefully.
+        return jsonify(result)
+    except Exception as exc:
+        logger.exception("Live lookup error for %s/%s", platform, identifier)
+        return jsonify({
+            "error": str(exc),
+            "platform": platform,
+            "username": identifier,
+            "data_completeness_score": 0.0,
+            "features": {},
+        }), 200
+
+# Keep legacy specific routes for backward compatibility if needed, 
+# but point them to the same logic.
+@csrf.exempt
+@app.route("/api/live/github/<username>")
+def live_github(username: str): return live_lookup_unified("github", username)
 
 @csrf.exempt
 @app.route("/api/live/reddit/<username>")
-def live_reddit(username: str):
-    if not HTTP_REQUESTS_AVAILABLE:
-        return jsonify({"error": "requests library not installed"}), 500
-    try:
-        headers = {"User-Agent": "FakeProfileDetector:v1.0 (educational project)"}
-        resp = http_requests.get(
-            f"https://www.reddit.com/user/{username}/about.json",
-            headers=headers, timeout=8
-        )
-        if resp.status_code == 404:
-            return jsonify({"error": "User not found"}), 404
-        if resp.status_code != 200:
-            return jsonify({"error": f"Reddit API error: {resp.status_code}"}), resp.status_code
-        data = resp.json().get("data", {})
-        created_ts = data.get("created_utc", 0)
-        created_str = datetime.fromtimestamp(created_ts).strftime("%Y-%m-%d") if created_ts else ""
-        return jsonify({
-            "username": data.get("name", ""),
-            "karma": data.get("total_karma", 0),
-            "created_at": created_str,
-            "about": data.get("subreddit", {}).get("public_description", "") or "",
-            "icon_img": data.get("icon_img", ""),
-            "is_verified": data.get("verified", False),
-        })
-    except http_requests.Timeout:
-        return jsonify({"error": "Reddit API timeout"}), 504
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
-
-# ---------------------------------------------------------------------------
-# Extended live API routes (Section 1)
-# ---------------------------------------------------------------------------
+def live_reddit(username: str): return live_lookup_unified("reddit", username)
 
 @csrf.exempt
 @app.route("/api/live/twitter/<username>")
 @app.route("/api/live/x/<username>")
 @app.route("/api/v1/live/twitter/<username>")
 @app.route("/api/v1/live/x/<username>")
-def live_twitter(username: str):
-    """Live Twitter/X profile enrichment. Requires TWITTER_BEARER_TOKEN."""
-    try:
-        from live_enrichment.twitter_enricher import enrich
-        result = enrich(username)
-        if "error" in result:
-            return jsonify(result), 404 if "not found" in result["error"].lower() else 503
-        return jsonify(result["raw_data"] | {"features": result["features"],
-                                              "completeness": result["data_completeness_score"]})
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
+def live_twitter(username: str): return live_lookup_unified("twitter", username)
 
 @csrf.exempt
 @app.route("/api/live/instagram/<username>")
 @app.route("/api/v1/live/instagram/<username>")
-def live_instagram(username: str):
-    """Live Instagram profile enrichment. Requires INSTAGRAM_ACCESS_TOKEN or instaloader."""
-    try:
-        from live_enrichment.instagram_enricher import enrich
-        result = enrich(username)
-        if "error" in result and result.get("data_completeness_score", 0) == 0:
-            return jsonify(result), 503
-        rd = result.get("raw_data", {})
-        return jsonify({
-            "username": rd.get("username", username),
-            "followers": result["features"].get("followers", 0),
-            "following": result["features"].get("following", 0),
-            "posts": result["features"].get("posts", 0),
-            "bio": result["features"].get("bio", ""),
-            "avatar_url": result["features"].get("avatar_url", ""),
-            "is_verified": result["features"].get("is_verified", 0),
-            "features": result["features"],
-            "completeness": result["data_completeness_score"],
-        })
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
+def live_instagram(username: str): return live_lookup_unified("instagram", username)
 
 @csrf.exempt
 @app.route("/api/live/youtube/<channel_id>")
 @app.route("/api/v1/live/youtube/<channel_id>")
-def live_youtube(channel_id: str):
-    """Live YouTube channel enrichment. Requires YOUTUBE_API_KEY."""
-    try:
-        from live_enrichment.youtube_enricher import enrich
-        result = enrich(channel_id)
-        if "error" in result and result.get("data_completeness_score", 0) == 0:
-            return jsonify(result), 503
-        return jsonify({
-            "channel_name": result["features"].get("channel_name", ""),
-            "subscribers": result["features"].get("subscribers", 0),
-            "videos": result["features"].get("videos", 0),
-            "about": result["features"].get("about", ""),
-            "features": result["features"],
-            "completeness": result["data_completeness_score"],
-        })
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
+def live_youtube(channel_id: str): return live_lookup_unified("youtube", channel_id)
 
 @csrf.exempt
 @app.route("/api/live/linkedin/<username>")
 @app.route("/api/v1/live/linkedin/<username>")
-def live_linkedin(username: str):
-    """LinkedIn profile enrichment. Requires LINKEDIN_ACCESS_TOKEN."""
-    try:
-        from live_enrichment.linkedin_enricher import enrich
-        result = enrich(username)
-        if "error" in result and result.get("data_completeness_score", 0) == 0:
-            return jsonify(result), 503
-        return jsonify({
-            "name": username,
-            "connections": result["features"].get("connections", 0),
-            "headline": result["features"].get("headline", ""),
-            "bio": result["features"].get("bio", ""),
-            "features": result["features"],
-            "completeness": result["data_completeness_score"],
-        })
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
+def live_linkedin(username: str): return live_lookup_unified("linkedin", username)
 
 @csrf.exempt
 @app.route("/api/live/discord/<user_id>")
 @app.route("/api/v1/live/discord/<user_id>")
-def live_discord(user_id: str):
-    """Discord profile enrichment. Requires DISCORD_BOT_TOKEN."""
-    try:
-        from live_enrichment.discord_enricher import enrich
-        result = enrich(user_id)
-        if "error" in result and result.get("data_completeness_score", 0) == 0:
-            return jsonify(result), 503
-        return jsonify({
-            "username": result["features"].get("username", ""),
-            "account_age_days": result["features"].get("account_age_days", 0),
-            "has_avatar": result["features"].get("has_avatar", 0),
-            "suspicion_score": result["features"].get("suspicion_score", 0),
-            "features": result["features"],
-            "completeness": result["data_completeness_score"],
-        })
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
+def live_discord(user_id: str): return live_lookup_unified("discord", user_id)
 
 @csrf.exempt
 @app.route("/api/live/tiktok/<username>")
 @app.route("/api/v1/live/tiktok/<username>")
-def live_tiktok(username: str):
-    """TikTok profile enrichment. Requires TIKTOK_API_KEY."""
-    try:
-        from live_enrichment.tiktok_enricher import enrich
-        result = enrich(username)
-        if "error" in result and result.get("data_completeness_score", 0) == 0:
-            return jsonify(result), 503
-        return jsonify({
-            "username": username,
-            "followers": result["features"].get("followers", 0),
-            "following": result["features"].get("following", 0),
-            "videos": result["features"].get("videos", 0),
-            "bio": result["features"].get("bio", ""),
-            "features": result["features"],
-            "completeness": result["data_completeness_score"],
-        })
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
-
-
-@csrf.exempt
-@app.route("/api/v1/live/<platform>/<identifier>")
-def live_generic_v1(platform: str, identifier: str):
-    """
-    Generic versioned live enrichment endpoint.
-    ---
-    tags:
-      - Live Enrichment API
-    parameters:
-      - name: platform
-        in: path
-        type: string
-        required: true
-        enum: [github, reddit, twitter, instagram, youtube, linkedin, discord, tiktok]
-      - name: identifier
-        in: path
-        type: string
-        required: true
-    responses:
-      200:
-        description: Enrichment result with raw_data, features, and completeness score.
-      503:
-        description: API key not configured or enrichment failed.
-    """
-    platform = platform.lower()
-    try:
-        from live_enrichment import enrich_profile
-        result = enrich_profile(platform, identifier)
-        status = 200 if result.get("data_completeness_score", 0) > 0 else 503
-        return jsonify(result), status
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+def live_tiktok(username: str): return live_lookup_unified("tiktok", username)
 
 
 @csrf.exempt

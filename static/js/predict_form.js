@@ -435,81 +435,145 @@
       status.classList.remove('d-none');
 
       fetch(`/api/live/${platform}/${encodeURIComponent(username)}`)
-        .then(r => r.json())
+        .then(r => {
+          if (!r.ok) throw new Error(`HTTP ${r.status}`);
+          return r.json();
+        })
         .then(data => {
           if (data.error) {
             status.className = 'small mt-2 text-danger';
             status.textContent = '✗ ' + data.error;
             return;
           }
+
+          // Debug: log what the API returned
+          console.group(`Live Lookup: ${platform}/${username}`);
+          console.log('Raw response:', data);
+          console.log('Features:', data.features);
+          console.log('Completeness:', data.completeness);
+          console.groupEnd();
+
           const feat = data.features || {};
+
+          // --- Comprehensive field mapping for all platforms ---
           const map = {
-            username: data.username || data.name || username,
-            name:     data.name || data.username || username,
-            channel_name: data.channel_name || data.name,
-            followers: data.followers, following: data.following,
-            tweets: data.tweets, posts: data.posts,
-            total_videos: data.videos || feat.videos,
-            subscribers:  data.subscribers || feat.subscribers,
-            public_repos: data.public_repos || feat.public_repos,
-            public_gists: data.public_gists != null ? data.public_gists : feat.public_gists,
-            account_age_days: data.account_age_days != null ? data.account_age_days : feat.account_age_days,
-            connections: data.connections || feat.connections,
-            headline:    data.headline || feat.headline,
-            about:       data.about || data.description || feat.about,
-            bio:         data.bio || data.about || data.description || feat.bio || '',
-            karma:       data.karma,
-            post_karma:  feat.post_karma,
-            comment_karma: feat.comment_karma,
-            score:       data.score,
-            snap_score:  data.score,
-            display_name: data.display_name || feat.display_name,
-            location:    data.location || feat.location,
-            website_url: data.website || feat.website,
-            company:     data.company || feat.company,
-            avatar_url:  data.avatar_url || data.profile_pic_url || feat.avatar_url,
-            total_stars:        feat.total_stars,
-            contributions_year: feat.contributions_year,
-            top_language:       feat.top_language,
-            unique_languages:   feat.unique_languages,
+            // Universal / Common fields
+            username:         data.username || username,
+            name:             data.name || data.username || username,
+            display_name:     data.name || data.display_name || feat.display_name,
+            followers:        data.followers,
+            following:        data.following,
+            bio:              data.bio || data.about || data.description || feat.bio || '',
+            about:            data.about || data.bio || data.description || feat.about || '',
+            location:         data.location || feat.location,
+            website_url:      data.website || feat.website,
+            avatar_url:       data.avatar_url || data.profile_pic_url || feat.avatar_url,
+            account_age_days: data.account_age_days ?? feat.account_age_days,
+
+            // Platform-specific aliases/fields
+            public_repos:     data.public_repos ?? feat.public_repos,
+            public_gists:     data.public_gists ?? feat.public_gists,
+            company:          data.company || feat.company,
+            tweets:           data.tweets ?? feat.tweets,
+            posts:            data.posts ?? data.media_count ?? feat.posts,
+            total_videos:     data.total_videos ?? data.videos ?? feat.total_videos,
+            subscribers:      data.subscribers ?? feat.subscribers,
+            channel_name:     data.channel_name || data.name,
+            connections:      data.connections ?? feat.connections,
+            headline:         data.headline || feat.headline,
+            karma:            data.karma ?? feat.karma,
+            post_karma:       data.post_karma ?? feat.post_karma,
+            comment_karma:    data.comment_karma ?? feat.comment_karma,
+            snap_score:       data.snap_score ?? data.score ?? feat.snap_score,
+            total_stars:      data.total_stars ?? feat.star_received_total,
+            total_likes:      data.total_likes ?? feat.total_likes,
+            unique_languages: data.unique_languages ?? feat.unique_languages,
+            contributions_year: data.contributions_year ?? feat.contributions_year,
+            top_language:     data.top_language || feat.top_language,
           };
+
           let filled = 0;
-          Object.entries(map).forEach(([k, v]) => {
-            if (v == null || v === '') return;
-            const el = form.querySelector(`[name="${k}"]`);
+          Object.entries(map).forEach(([fieldName, value]) => {
+            if (value == null || value === '') return;
+            
+            // Try to find the field by name, then ID
+            const el = form.querySelector(`[name="${fieldName}"]`)
+                    || form.querySelector(`#f_${fieldName}`)
+                    || form.querySelector(`#${fieldName}`);
+            
             if (!el) return;
-            if (el.type === 'checkbox') el.checked = !!v;
-            else el.value = v;
-            filled += 1;
+
+            if (el.type === 'checkbox') {
+              el.checked = Boolean(value);
+            } else if (el.tagName === 'SELECT') {
+              // For connections select or other dropdowns
+              const options = Array.from(el.options);
+              const matchingOption = options.find(o => 
+                o.value == value || o.text.toLowerCase().includes(String(value).toLowerCase())
+              );
+              if (matchingOption) el.value = matchingOption.value;
+            } else {
+              el.value = value;
+            }
+            filled++;
           });
-          // Boolean flags
-          if (data.is_verified !== undefined) {
-            const v = form.querySelector('[name="verified"]') || form.querySelector('[name="is_verified"]');
-            if (v && v.type === 'checkbox') v.checked = !!data.is_verified;
-          }
-          if (data.has_avatar !== undefined) {
-            const a = form.querySelector('[name="has_custom_avatar"]');
-            if (a && a.type === 'checkbox') a.checked = !!data.has_avatar;
-          }
+
+          // Boolean checkboxes handling (is_verified, has_avatar)
+          const booleans = [
+            { key: 'is_verified', names: ['verified', 'is_verified'] },
+            { key: 'has_avatar',  names: ['has_custom_avatar', 'has_avatar', 'has_photo'] }
+          ];
+          booleans.forEach(bool => {
+            if (data[bool.key] !== undefined) {
+              bool.names.forEach(n => {
+                const el = form.querySelector(`[name="${n}"]`);
+                if (el && el.type === 'checkbox') {
+                  el.checked = Boolean(data[bool.key]);
+                  filled++;
+                }
+              });
+            }
+          });
+
+          // Update status
           status.className = 'small mt-2 text-success';
           status.textContent = `✓ Auto-filled ${filled} fields from live data`;
-          if (data.completeness !== undefined) {
+          if (data.completeness != null) {
             status.textContent += ` (${Math.round(data.completeness * 100)}% completeness)`;
           }
+
+          // Show summary card if exists
+          const summaryEl = document.getElementById('lookupSummary');
+          if (summaryEl) {
+            const items = [];
+            if (data.followers != null) items.push(`${data.followers.toLocaleString()} followers`);
+            if (data.posts != null) {
+              const postLabel = (platform === 'twitter' || platform === 'x') ? 'tweets' : (platform === 'youtube' ? 'videos' : 'posts');
+              items.push(`${data.posts.toLocaleString()} ${postLabel}`);
+            }
+            if (data.account_age_days) items.push(`${data.account_age_days} days old`);
+            if (data.is_verified) items.push('✓ Verified');
+            summaryEl.innerHTML = items.length ? `<small class="text-muted">Fetched: ${items.join(' · ')}</small>` : '';
+            summaryEl.classList.remove('d-none');
+          }
+
           // Trigger downstream analyses
-          if (usernameField && usernameField.value) analyzeUsername(usernameField.value);
-          if (bioField && bioField.value)           analyzeBio(bioField.value);
+          if (usernameField?.value) analyzeUsername(usernameField.value.trim());
+          if (bioField?.value)      analyzeBio(bioField.value);
           const url = avatarUrl?.value?.trim();
           if (url) analyzeAvatarUrl(url);
-          updateCoverage(); updateDerived();
+          
+          updateCoverage(); 
+          updateDerived();
         })
         .catch(err => {
           status.className = 'small mt-2 text-danger';
-          status.textContent = '✗ Network error: ' + err;
+          status.textContent = '✗ Network error: ' + err.message;
+          console.error('Live lookup error:', err);
         })
         .finally(() => {
           lookupBtn.disabled = false;
-          lookupBtn.innerHTML = '<i class="bi bi-search me-1"></i>Fetch & Auto-Fill';
+          lookupBtn.innerHTML = '<i class="bi bi-cloud-download me-1"></i>Live Lookup';
         });
     });
   }

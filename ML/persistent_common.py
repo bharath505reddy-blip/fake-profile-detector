@@ -1068,11 +1068,31 @@ def predict_with_saved_model(
     warnings: List[str] = []
     df = normalize_columns(df)
 
+    # ── Strip label columns before feature extraction ─────────────────────────
+    # Labels must never reach the model as features — this is the single
+    # entry point for all callers, so stripping here covers every upload path.
+    # We save the stripped series so they can be re-attached to the returned
+    # dataframe (the result CSV must keep them for accuracy calculation).
+    _stripped_labels: dict = {}
+    for _lc in LABEL_COLUMNS:
+        if _lc in df.columns:
+            _stripped_labels[_lc] = df[_lc].copy()
+            df = df.drop(columns=[_lc])
+    if _stripped_labels:
+        logger.info(
+            "Stripped %d label column(s) from prediction input: %s",
+            len(_stripped_labels),
+            list(_stripped_labels.keys()),
+        )
+    # ── End label stripping ───────────────────────────────────────────────────
+
     if not model_path.exists():
         warnings.append("No saved model found. Train the model first (Persistent Learning).")
         df["prediction"] = "Legit"
         df["confidence"] = 0.0
         counts = {"Fake": 0, "Legit": len(df)}
+        for _lc, _ls in _stripped_labels.items():
+            df[_lc] = _ls.values
         return df, counts, {}, warnings
 
     model = joblib.load(model_path)

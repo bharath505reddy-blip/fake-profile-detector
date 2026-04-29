@@ -194,6 +194,18 @@ def enrich(channel_id_or_username: str) -> Dict:
     return {
         "platform": "youtube",
         "username": channel_id_or_username,
+        "name": channel_title,
+        "followers": subscribers,
+        "following": None,
+        "posts": video_count,
+        "bio": description,
+        "is_verified": False,
+        "has_avatar": True, # Usually always has one
+        "avatar_url": None, # Could fetch from snippet if needed
+        "account_age_days": int(account_age_days) if account_age_days else None,
+        "location": None,
+        "website": None,
+        "completeness": min(1.0, fields_fetched / fields_total),
         "raw_data": {
             "channel_title": channel_title,
             "subscribers": subscribers,
@@ -204,4 +216,8 @@ def enrich(channel_id_or_username: str) -> Dict:
         },
         "features": features,
         "data_completeness_score": min(1.0, fields_fetched / fields_total),
+        "channel_name": channel_title,
+        "subscribers": subscribers,
+        "total_videos": video_count,
+        "view_count": view_count,
     }
