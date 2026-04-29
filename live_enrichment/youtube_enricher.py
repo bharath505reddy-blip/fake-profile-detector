@@ -191,6 +191,8 @@ def enrich(channel_id_or_username: str) -> Dict:
         channel_id_or_username, fields_fetched / fields_total, subscribers, video_count,
     )
 
+    thumbnail_url = snippet.get("thumbnails", {}).get("default", {}).get("url") or None
+
     return {
         "platform": "youtube",
         "username": channel_id_or_username,
@@ -199,9 +201,10 @@ def enrich(channel_id_or_username: str) -> Dict:
         "following": None,
         "posts": video_count,
         "bio": description,
+        "about": description,
         "is_verified": False,
-        "has_avatar": True, # Usually always has one
-        "avatar_url": None, # Could fetch from snippet if needed
+        "has_avatar": bool(thumbnail_url),
+        "avatar_url": thumbnail_url,
         "account_age_days": int(account_age_days) if account_age_days else None,
         "location": None,
         "website": None,

@@ -484,7 +484,8 @@
             karma:            data.karma ?? feat.karma,
             post_karma:       data.post_karma ?? feat.post_karma,
             comment_karma:    data.comment_karma ?? feat.comment_karma,
-            snap_score:       data.snap_score ?? data.score ?? feat.snap_score,
+            score:            data.score ?? feat.score,
+            snap_score:       data.snap_score ?? data.score ?? feat.snap_score ?? feat.score,
             total_stars:      data.total_stars ?? feat.star_received_total,
             total_likes:      data.total_likes ?? feat.total_likes,
             unique_languages: data.unique_languages ?? feat.unique_languages,
@@ -495,27 +496,31 @@
           let filled = 0;
           Object.entries(map).forEach(([fieldName, value]) => {
             if (value == null || value === '') return;
-            
+
             // Try to find the field by name, then ID
             const el = form.querySelector(`[name="${fieldName}"]`)
                     || form.querySelector(`#f_${fieldName}`)
                     || form.querySelector(`#${fieldName}`);
-            
+
             if (!el) return;
 
             if (el.type === 'checkbox') {
               el.checked = Boolean(value);
+              filled++;
             } else if (el.tagName === 'SELECT') {
               // For connections select or other dropdowns
               const options = Array.from(el.options);
-              const matchingOption = options.find(o => 
+              const matchingOption = options.find(o =>
                 o.value == value || o.text.toLowerCase().includes(String(value).toLowerCase())
               );
-              if (matchingOption) el.value = matchingOption.value;
+              if (matchingOption) {
+                el.value = matchingOption.value;
+                filled++;
+              }
             } else {
               el.value = value;
+              filled++;
             }
-            filled++;
           });
 
           // Boolean checkboxes handling (is_verified, has_avatar)

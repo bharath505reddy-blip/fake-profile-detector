@@ -44,6 +44,17 @@ def _connection_bucket(connections: int) -> int:
     return 0
 
 
+def _connection_bucket_str(connections: int) -> str:
+    """Return the string bucket that matches the form select options."""
+    if connections >= 500:
+        return "500+"
+    if connections >= 150:
+        return "150-500"
+    if connections >= 50:
+        return "50-150"
+    return "< 50"
+
+
 def _headline_buzzword_score(headline: str) -> float:
     if not headline:
         return 0.0
@@ -167,6 +178,7 @@ def enrich(identifier: str, manual_data: Optional[Dict] = None) -> Dict:
         "following": None,
         "posts": None,
         "bio": summary,
+        "about": summary,
         "is_verified": False,
         "has_avatar": has_photo,
         "avatar_url": raw.get("profile_pic_url"),
@@ -177,6 +189,7 @@ def enrich(identifier: str, manual_data: Optional[Dict] = None) -> Dict:
         "raw_data": raw,
         "features": features,
         "data_completeness_score": min(1.0, fields_fetched / fields_total),
-        "connections": connections,
+        "connections": _connection_bucket_str(connections) if connections else "",
+        "connections_numeric": connections,
         "headline": headline,
     }
