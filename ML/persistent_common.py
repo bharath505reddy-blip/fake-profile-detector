@@ -63,7 +63,10 @@ except Exception:
     logger.warning("imbalanced-learn unavailable — class balancing disabled.")
 
 
-LABEL_COLUMNS = ["label", "is_fake", "fake", "target", "is_bot", "bot"]
+LABEL_COLUMNS = [
+    "label", "is_fake", "fake", "target", "is_bot", "bot",
+    "fake_profile", "fake_account", "class",
+]
 RF_ESTIMATORS = 300
 
 # ---------------------------------------------------------------------------
@@ -1125,18 +1128,17 @@ def predict_with_saved_model(
             )
     # ── End feature alignment ─────────────────────────────────────────────
 
-    preds = model.predict(X_w)
-    df_norm["prediction"] = pd.Series(preds, index=df_norm.index).map(
-        lambda v: "Fake" if v == 1 else "Legit"
-    )
-
-    # Confidence: probability of the predicted class, calibrated if available
+    # ── Confidence calibrator ─────────────────────────────────────────────
     try:
         from ML.confidence_calibrator import RobustConfidenceCalibrator
         calibrator = RobustConfidenceCalibrator.load(model_path)
     except Exception:
         calibrator = None
 
+    # ── Probabilities + 0.45 batch classification threshold ───────────────
+    # Lower threshold (vs default 0.5) catches more borderline fakes.
+    # Per-platform confidence thresholds below handle false-positive reduction.
+    _BATCH_FAKE_THRESHOLD = 0.45
     try:
         proba = model.predict_proba(X_w)
         raw_fake_proba = proba[:, 1]
@@ -1144,12 +1146,51 @@ def predict_with_saved_model(
             fake_proba = np.array([calibrator.calibrate(float(p)) for p in raw_fake_proba])
         else:
             fake_proba = raw_fake_proba
+        preds = (fake_proba >= _BATCH_FAKE_THRESHOLD).astype(int)
         confidence = np.where(preds == 1, fake_proba, 1 - fake_proba)
         df_norm["confidence"] = (confidence * 100).round(1)
-    except Exception:
+        logger.debug(
+            "[%s] batch threshold=%.2f fake_proba=[%.3f, %.3f] n_fake=%d",
+            platform_name, _BATCH_FAKE_THRESHOLD,
+            float(raw_fake_proba.min()), float(raw_fake_proba.max()), int(preds.sum()),
+        )
+    except Exception as _pred_exc:
+        logger.warning(
+            "[%s] predict_proba failed (%s) — falling back to model.predict()",
+            platform_name, _pred_exc,
+        )
+        preds = model.predict(X_w)
         df_norm["confidence"] = None
 
-    # Apply confidence threshold — override low-confidence predictions
+    df_norm["prediction"] = pd.Series(preds, index=df_norm.index).map(
+        lambda v: "Fake" if v == 1 else "Legit"
+    )
+
+    # ── Per-platform confidence threshold — reduce false positives ─────────
+    # If confidence is below the platform-specific minimum, downgrade Fake→Legit.
+    try:
+        from ML.thresholds import apply_confidence_threshold as _apply_threshold
+        _override_count = 0
+        for _idx in df_norm.index:
+            _pred = df_norm.at[_idx, "prediction"]
+            _conf_val = df_norm.at[_idx, "confidence"] if "confidence" in df_norm.columns else None
+            if _pred == "Fake" and _conf_val is not None and not pd.isna(_conf_val):
+                _new_pred, _, _reason = _apply_threshold(_pred, float(_conf_val), platform_name)
+                if _new_pred != _pred:
+                    df_norm.at[_idx, "prediction"] = _new_pred
+                    _override_count += 1
+        if _override_count > 0:
+            logger.info(
+                "[%s] Confidence threshold: downgraded %d Fake→Legit predictions "
+                "(below platform threshold)",
+                platform_name, _override_count,
+            )
+    except Exception as _thr_exc:
+        logger.warning(
+            "[%s] Per-platform confidence threshold failed: %s", platform_name, _thr_exc
+        )
+
+    # ── User-supplied confidence threshold — mark low-confidence as Uncertain
     if confidence_threshold > 0:
         try:
             conf_vals = df_norm["confidence"].fillna(0)
@@ -1203,6 +1244,11 @@ def predict_with_saved_model(
         chart_files["shap"] = shap_chart
     if shap_single_chart:
         chart_files["shap_single"] = shap_single_chart
+
+    # Re-attach stripped label columns so the result CSV keeps them for
+    # accuracy calculation in the /results route.
+    for _lc, _ls in _stripped_labels.items():
+        df_norm[_lc] = _ls.values
 
     return df_norm, counts, chart_files, warnings
 

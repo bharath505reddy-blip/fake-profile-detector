@@ -77,10 +77,43 @@
             </div>
           </div>
           <hr class="my-2">
+          <!-- Detection counts -->
+          <div class="row g-1 text-center small mb-2">
+            <div class="col-6">
+              <div class="text-muted" style="font-size:0.7rem">True Fakes</div>
+              <div class="fw-semibold text-danger">{{ accuracy_metrics.true_fake_count }}</div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted" style="font-size:0.7rem">Predicted Fake</div>
+              <div class="fw-semibold text-warning">{{ accuracy_metrics.predicted_fake_count }}</div>
+            </div>
+          </div>
+          {% if accuracy_metrics.false_negatives is defined %}
+          <div class="row g-1 text-center small mb-2">
+            <div class="col-6">
+              <div class="text-muted" style="font-size:0.7rem">Missed Fakes</div>
+              <div class="fw-semibold {% if accuracy_metrics.false_negatives > 0 %}text-danger{% else %}text-success{% endif %}">
+                {{ accuracy_metrics.false_negatives }}
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="text-muted" style="font-size:0.7rem">FN Rate</div>
+              <div class="fw-semibold {% if accuracy_metrics.false_negative_rate > 20 %}text-danger{% elif accuracy_metrics.false_negative_rate > 10 %}text-warning{% else %}text-success{% endif %}">
+                {{ accuracy_metrics.false_negative_rate }}%
+              </div>
+            </div>
+          </div>
+          {% if accuracy_metrics.analysis_note %}
+          <div class="alert alert-info p-2 mb-0" style="font-size:0.75rem">
+            <i class="bi bi-info-circle me-1"></i>{{ accuracy_metrics.analysis_note }}
+          </div>
+          {% endif %}
+          {% else %}
           <div class="small text-muted">
             True: {{ accuracy_metrics.true_fake_count }} fake / {{ accuracy_metrics.true_legit_count }} legit<br>
             Predicted: {{ accuracy_metrics.predicted_fake_count }} fake / {{ accuracy_metrics.predicted_legit_count }} legit
           </div>
+          {% endif %}
         </div>
         {% else %}
         <div class="small text-muted mb-3 fst-italic">

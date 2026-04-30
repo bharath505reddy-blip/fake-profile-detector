@@ -713,6 +713,34 @@ def results(platform: str):
     if label_col:
         try:
             accuracy_metrics = compute_accuracy_on_csv(df, label_col)
+            if accuracy_metrics:
+                true_fake = accuracy_metrics.get("true_fake_count", 0)
+                true_legit = accuracy_metrics.get("true_legit_count", 0)
+                pred_fake = accuracy_metrics.get("predicted_fake_count", 0)
+
+                false_negatives = max(0, true_fake - pred_fake)
+                false_positives = max(0, pred_fake - true_fake)
+                fnr = false_negatives / max(true_fake, 1)
+                fpr = false_positives / max(true_legit, 1)
+
+                accuracy_metrics["false_negatives"] = false_negatives
+                accuracy_metrics["false_positives"] = false_positives
+                accuracy_metrics["false_negative_rate"] = round(fnr * 100, 1)
+                accuracy_metrics["false_positive_rate"] = round(fpr * 100, 1)
+
+                if false_negatives > 0:
+                    accuracy_metrics["analysis_note"] = (
+                        f"Model missed {false_negatives} fake profiles "
+                        f"({fnr * 100:.1f}% false negative rate). "
+                        f"Retraining with more borderline examples will improve this."
+                    )
+                elif false_positives > 0:
+                    accuracy_metrics["analysis_note"] = (
+                        f"Model flagged {false_positives} legitimate profiles as fake "
+                        f"({fpr * 100:.1f}% false positive rate)."
+                    )
+                else:
+                    accuracy_metrics["analysis_note"] = "Good detection rate!"
         except Exception as _acc_exc:
             logger.warning("Accuracy computation failed: %s", _acc_exc)
 
@@ -1146,13 +1174,21 @@ def dataset_stats(platform: str):
         try:
             df = pd.read_csv(save_path)
             df = normalize_columns(df)
-            stats = get_dataset_statistics(df, FEATURE_BUILDERS[platform], platform)
 
             from ML.persistent_common import find_label_col, coerce_label_binary
             label_col = find_label_col(df)
+            y = None
             if label_col:
                 y = coerce_label_binary(df[label_col]).dropna().astype(int)
-                X, _ = FEATURE_BUILDERS[platform](df)
+                df_features = df.drop(columns=[label_col])
+                logger.info("dataset_stats: stripped label column '%s'", label_col)
+            else:
+                df_features = df
+
+            stats = get_dataset_statistics(df_features, FEATURE_BUILDERS[platform], platform)
+
+            if y is not None:
+                X, _ = FEATURE_BUILDERS[platform](df_features)
                 stats["class_counts"] = y.value_counts().to_dict()
                 stats_charts = save_dataset_stats_charts(CHARTS_DIR, X, y, platform)
             else:
@@ -1392,6 +1428,10 @@ def anomaly_detection(platform: str):
         try:
             df = pd.read_csv(save_path)
             df = normalize_columns(df)
+            label_col_a = find_label_col(df)
+            if label_col_a:
+                df = df.drop(columns=[label_col_a])
+                logger.info("anomaly_detection: stripped label column '%s'", label_col_a)
             X, df_norm = FEATURE_BUILDERS[platform](df)
             labels, raw_scores = detect_anomalies(X)
             df_norm["anomaly_flag"] = pd.Series(labels).map(lambda v: "Anomaly" if v == -1 else "Normal")
@@ -2525,6 +2565,46 @@ def api_predict_v1(platform: str):
     })
 
 
+@app.route("/debug/csv-check", methods=["POST"])
+@csrf.exempt
+def debug_csv_check():
+    """
+    Debug endpoint: upload a CSV and verify which column is detected as the
+    label, what value counts it has, and what feature columns the model would
+    receive after stripping.  Only available when app.debug is True.
+    """
+    if not app.debug:
+        return jsonify({"error": "Only available in debug mode"}), 403
+
+    if "file" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    f = request.files["file"]
+    try:
+        df = pd.read_csv(f)
+    except Exception as exc:
+        return jsonify({"error": f"Could not read CSV: {exc}"}), 400
+
+    df = normalize_columns(df)
+    label_found = find_label_col(df)
+
+    result = {
+        "total_rows": len(df),
+        "total_columns": len(df.columns),
+        "all_columns": list(df.columns),
+        "label_column_detected": label_found,
+        "label_value_counts": (
+            df[label_found].value_counts().to_dict() if label_found else None
+        ),
+        "feature_columns_after_strip": (
+            [c for c in df.columns if c != label_found]
+            if label_found else list(df.columns)
+        ),
+        "first_row_sample": df.iloc[0].to_dict() if len(df) > 0 else {},
+    }
+    return jsonify(result)
+
+
 @app.route("/api/v1/status", methods=["GET"])
 @csrf.exempt
 def api_status():
@@ -2541,6 +2621,69 @@ def api_status():
             "histgb": HISTGB_AVAILABLE,
         },
     })
+
+
+@app.route("/admin/retrain-all", methods=["POST"])
+@login_required
+def retrain_all_platforms():
+    """Retrain all 10 platform models with freshly generated 5-tier data (admin only)."""
+    if not current_user.is_admin:
+        return jsonify({"error": "Admin only"}), 403
+
+    results = {}
+    for platform in PLATFORMS:
+        try:
+            app.logger.info("Retraining %s with 5-tier dataset...", platform)
+
+            df = generate_dataset(
+                platform=platform,
+                total_count=2000,
+                fake_ratio=0.35,
+                celebrity_ratio=0.07,
+            )
+
+            csv_path = UPLOAD_DIR / f"retrain_{platform}_{os.urandom(8).hex()}.csv"
+            df.to_csv(csv_path, index=False)
+
+            try:
+                ok, msg, metrics, rows_used = train_and_save(
+                    labeled_csv_paths=[csv_path],
+                    model_path=MODEL_PATHS[platform],
+                    feature_builder=FEATURE_BUILDERS[platform],
+                    min_rows=MIN_TRAIN_ROWS,
+                    charts_dir=CHARTS_DIR,
+                    platform=platform,
+                    include_stats=True,
+                    use_stacking=True,
+                    balancing_strategy="smote",
+                    use_optuna=True,
+                    optuna_trials=20,
+                )
+            finally:
+                _cleanup(csv_path)
+
+            if ok:
+                log_training_event(platform, rows_used, metrics)
+                results[platform] = {
+                    "status": "success",
+                    "accuracy": metrics.get("accuracy"),
+                    "f1": metrics.get("f1"),
+                    "dataset_size": len(df),
+                    "fake_count": int(df["label"].sum()),
+                    "legit_count": int((df["label"] == 0).sum()),
+                }
+                app.logger.info(
+                    "%s retrained: accuracy=%s f1=%s",
+                    platform, metrics.get("accuracy"), metrics.get("f1"),
+                )
+            else:
+                results[platform] = {"status": "error", "error": msg}
+
+        except Exception as exc:
+            app.logger.error("Failed to retrain %s: %s", platform, exc)
+            results[platform] = {"status": "error", "error": str(exc)}
+
+    return jsonify(results)
 
 
 @app.route("/admin/confidence-monitor")

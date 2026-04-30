@@ -68,6 +68,15 @@
               <i class="bi bi-person-check me-1"></i>Public Figures
             </a>
           </li>
+          <li class="nav-item">
+            <form method="POST" action="{{ url_for('retrain_all_platforms') }}"
+                  onsubmit="return confirm('Retrain all 10 models with fresh data? This may take 10-20 minutes.')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="nav-link btn btn-link text-warning p-0 ms-2">
+                <i class="bi bi-arrow-repeat me-1"></i>Retrain All
+              </button>
+            </form>
+          </li>
           {% endif %}
           <li class="nav-item dropdown">
             <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">

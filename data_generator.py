@@ -789,6 +789,202 @@ def _gen_snapchat_borderline_legit(n: int) -> List[dict]:
     return rows
 
 
+# ---------------------------------------------------------------------------
+# Borderline FAKE generators — aged/semi-legit-looking fakes the model
+# has historically missed. Added to expand training distribution.
+# ---------------------------------------------------------------------------
+
+# Shared semi-legit bios used by borderline fakes
+_BORDERLINE_FAKE_BIOS = [
+    "",
+    "Just here",
+    "Love life",
+    "Living my best life 🌟",
+    "DM for collabs",
+    "Business inquiries below",
+    "Content creator",
+    "Entrepreneur",
+    "Digital marketing",
+    "Investor",
+]
+
+
+def _borderline_fake_temporal_cols(n: int) -> dict:
+    """Temporal cols for borderline fakes — between obvious fakes and legit."""
+    return {
+        "burst_score": RNG.uniform(0.3, 0.65, n).round(3),
+        "posting_regularity_score": RNG.uniform(0.5, 0.80, n).round(3),
+        "time_of_day_entropy": RNG.uniform(0.25, 0.55, n).round(3),
+        "active_hours_count": RNG.integers(2, 8, n),
+        "follow_velocity": RNG.uniform(10, 80, n).round(2),
+        "duplicate_content_ratio": RNG.uniform(0.3, 0.65, n).round(3),
+        "sentiment_variance": RNG.uniform(0.05, 0.25, n).round(4),
+        "profile_completeness_score": RNG.uniform(0.15, 0.50, n).round(3),
+        "mutual_follower_ratio": RNG.uniform(0.02, 0.15, n).round(4),
+    }
+
+
+def _gen_instagram_borderline_fake(n: int) -> List[dict]:
+    """Aged fake Instagram accounts — moderate numbers, look semi-legit."""
+    rows = []
+    for _ in range(n):
+        age = int(RNG.integers(180, 1500))
+        followers = int(RNG.integers(50, 2000))
+        following = int(RNG.integers(500, 3000))
+        posts = int(RNG.integers(10, 100))
+        rows.append({
+            "username": _rng_sample(_LEGIT_USERNAMES, 1)[0],
+            "followers": followers,
+            "following": following,
+            "posts": posts,
+            "bio": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+            "is_verified": 0,
+            "account_age_days": age,
+            "post_timestamps_json": _fake_timestamps(posts, age),
+        })
+    return rows
+
+
+def _gen_facebook_borderline_fake(n: int) -> List[dict]:
+    """Facebook borderline fakes — bought-friends accounts with thin profiles."""
+    rows = []
+    for _ in range(n):
+        rows.append({
+            "name": _rng_sample(_LEGIT_USERNAMES, 1)[0].replace("_", " ").title(),
+            "friends": int(RNG.integers(50, 200)),
+            "followers": int(RNG.integers(10, 150)),
+            "posts": int(RNG.integers(0, 10)),
+            "bio": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+            "is_verified": 0,
+        })
+    return rows
+
+
+def _gen_x_borderline_fake(n: int) -> List[dict]:
+    """X/Twitter borderline fakes — some activity but still follow-heavy."""
+    rows = []
+    for _ in range(n):
+        rows.append({
+            "username": _rng_sample(_LEGIT_USERNAMES, 1)[0],
+            "followers": int(RNG.integers(50, 500)),
+            "following": int(RNG.integers(1000, 4000)),
+            "tweets": int(RNG.integers(50, 500)),
+            "bio": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+            "is_verified": 0,
+        })
+    return rows
+
+
+def _gen_linkedin_borderline_fake(n: int) -> List[dict]:
+    """LinkedIn borderline fakes — low connections, templated headline."""
+    rows = []
+    for _ in range(n):
+        connections = int(RNG.integers(50, 150))
+        rows.append({
+            "name": _rng_sample(_LEGIT_USERNAMES, 1)[0].replace("_", " ").title(),
+            "connections": connections,
+            "followers": int(connections * RNG.uniform(0.5, 1.5)),
+            "headline": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0] or "Business Owner",
+            "about": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+        })
+    return rows
+
+
+def _gen_github_borderline_fake(n: int) -> List[dict]:
+    """GitHub borderline fakes — new accounts with high follow/few repos ratio."""
+    rows = []
+    for _ in range(n):
+        age_days = int(RNG.integers(1, 180))
+        rows.append({
+            "username": _rng_sample(_LEGIT_USERNAMES, 1)[0],
+            "followers": int(RNG.integers(0, 10)),
+            "following": int(RNG.integers(100, 500)),
+            "public_repos": int(RNG.integers(0, 2)),
+            "public_gists": 0,
+            "account_age_days": age_days,
+            "bio": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+        })
+    return rows
+
+
+def _gen_discord_borderline_fake(n: int) -> List[dict]:
+    """Discord borderline fakes — new accounts that joined several servers fast."""
+    rows = []
+    for _ in range(n):
+        age_days = int(RNG.integers(1, 30))
+        created = _discord_created_at(age_days)
+        gap_secs = float(RNG.uniform(60, 600))
+        rows.append({
+            "timestamp_utc": created,
+            "guild_id": str(int(RNG.integers(100000000, 999999999))),
+            "guild_name": "Unknown Server",
+            "user_id": str(int(RNG.integers(100000000000000000, 999999999999999999))),
+            "username": _rng_sample(_LEGIT_USERNAMES, 1)[0],
+            "created_at_utc": created,
+            "joined_at_utc": _discord_joined_at(created, gap_secs),
+            "account_age_days": age_days,
+            "has_avatar": int(RNG.random() > 0.5),
+            "suspicion_score": float(RNG.uniform(0.35, 0.65)),
+            "reasons": "new_account",
+            "action_taken": "monitor",
+        })
+    return rows
+
+
+def _gen_youtube_borderline_fake(n: int) -> List[dict]:
+    """YouTube borderline fakes — tiny channels with generic names, few videos."""
+    rows = []
+    for _ in range(n):
+        rows.append({
+            "channel_name": _rng_sample(_LEGIT_CHANNEL_NAMES, 1)[0],
+            "subscribers": int(RNG.integers(0, 100)),
+            "videos": int(RNG.integers(0, 5)),
+            "about": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+        })
+    return rows
+
+
+def _gen_tiktok_borderline_fake(n: int) -> List[dict]:
+    """TikTok borderline fakes — moderate followers but heavy following, few videos."""
+    rows = []
+    for _ in range(n):
+        rows.append({
+            "username": _rng_sample(_LEGIT_USERNAMES, 1)[0],
+            "followers": int(RNG.integers(100, 1000)),
+            "following": int(RNG.integers(2000, 5000)),
+            "videos": int(RNG.integers(0, 5)),
+            "bio": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+        })
+    return rows
+
+
+def _gen_reddit_borderline_fake(n: int) -> List[dict]:
+    """Reddit borderline fakes — low karma, young account, minimal sub activity."""
+    rows = []
+    for _ in range(n):
+        age_days = int(RNG.integers(1, 180))
+        created = (datetime.now(timezone.utc) - timedelta(days=age_days)).strftime("%Y-%m-%d")
+        rows.append({
+            "username": _rng_sample(_LEGIT_USERNAMES, 1)[0],
+            "karma": int(RNG.integers(0, 100)),
+            "created_at": created,
+            "about": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+        })
+    return rows
+
+
+def _gen_snapchat_borderline_fake(n: int) -> List[dict]:
+    """Snapchat borderline fakes — very low score, no bitmoji, new account."""
+    rows = []
+    for _ in range(n):
+        rows.append({
+            "username": _rng_sample(_LEGIT_USERNAMES, 1)[0],
+            "score": int(RNG.integers(0, 500)),
+            "bio": _rng_sample(_BORDERLINE_FAKE_BIOS, 1)[0],
+        })
+    return rows
+
+
 # Celebrity generators dispatch table
 # Platforms without a dedicated celebrity generator fall back to None (no supplement)
 _CELEBRITY_GENERATORS: dict = {
@@ -829,6 +1025,20 @@ _LEGIT_GENERATORS = {
     "tiktok": _gen_tiktok_legit,
     "reddit": _gen_reddit_legit,
     "snapchat": _gen_snapchat_legit,
+}
+
+# Borderline fake generators (aged/semi-legit fakes the model often misses)
+_BORDERLINE_FAKE_GENERATORS = {
+    "instagram": _gen_instagram_borderline_fake,
+    "facebook":  _gen_facebook_borderline_fake,
+    "x":         _gen_x_borderline_fake,
+    "linkedin":  _gen_linkedin_borderline_fake,
+    "github":    _gen_github_borderline_fake,
+    "discord":   _gen_discord_borderline_fake,
+    "youtube":   _gen_youtube_borderline_fake,
+    "tiktok":    _gen_tiktok_borderline_fake,
+    "reddit":    _gen_reddit_borderline_fake,
+    "snapchat":  _gen_snapchat_borderline_fake,
 }
 
 # Borderline legit generators (casual real users that may look ambiguous)
@@ -980,7 +1190,7 @@ def generate_legit_profiles(platform: str, count: int) -> pd.DataFrame:
 def generate_dataset(
     platform: str,
     total_count: int = 1000,
-    fake_ratio: float = 0.3,
+    fake_ratio: float = 0.35,
     add_noise: bool = True,
     realistic_mode: bool = True,
     celebrity_ratio: float = 0.07,
@@ -988,25 +1198,29 @@ def generate_dataset(
     """
     Generate a complete labeled dataset combining fake and legit profiles.
 
-    When realistic_mode=True (default), uses empirically-realistic proportions:
-      - 40% high-quality legit (established accounts, complete profiles)
-      - 30% borderline legit (casual users, new accounts, sparse data)
-      - 20% obvious fakes (bot patterns, spam)
-      - 10% sophisticated fakes (semi-legit looking)
+    When realistic_mode=True (default), uses a 5-tier distribution:
 
-    celebrity_ratio: fraction of total that should be celebrity-tier legit profiles.
-    These are generated in addition to the realistic-mode tiers and are critical for
-    teaching the model that extreme follower ratios can be legitimate.
+      Fake tiers (35% of total by default):
+        - Obvious fakes:      40% of fake quota  (bot patterns, spam)
+        - Borderline fakes:   35% of fake quota  (aged/semi-legit looking)
+        - Sophisticated fakes:25% of fake quota  (harder to detect)
 
-    This distribution teaches the model that sparse/incomplete profiles are
-    NOT automatically fake — addressing the core confidence calibration problem.
+      Legit tiers (65% of total by default):
+        - Celebrity legit:    7% of total        (high followers, verified)
+        - Established legit:  25% of non-celeb   (normal active users)
+        - Casual legit:       40% of non-celeb   (complete profiles)
+        - Borderline legit:   35% of non-celeb   (low activity, no bio)
+
+    The borderline tiers teach the model to correctly classify ambiguous profiles
+    instead of relying only on extreme/obvious signals.
 
     Args:
         platform: One of the 10 supported platforms.
         total_count: Total number of profiles (fake + legit).
-        fake_ratio: Fraction of fake profiles (ignored when realistic_mode=True).
+        fake_ratio: Fraction of fake profiles (default 0.35).
         add_noise: Whether to inject realistic missingness and noise.
-        realistic_mode: Use 40/30/20/10 realistic distribution (recommended).
+        realistic_mode: Use 5-tier realistic distribution (recommended).
+        celebrity_ratio: Fraction of total that are celebrity-tier legit.
 
     Returns:
         Shuffled DataFrame with all platform columns, temporal feature columns, and `label`.
@@ -1027,49 +1241,74 @@ def generate_dataset(
             df_celebrity[col] = vals
     else:
         df_celebrity = None
+        n_celebrity = 0
 
     if realistic_mode:
-        # Adjust remaining count to account for celebrity supplement
-        remaining = max(10, total_count - (n_celebrity if celebrity_gen else 0))
-        # 40% high-quality legit, 30% borderline legit, 20% obvious fakes, 10% sophisticated fakes
-        n_hq_legit = max(1, int(remaining * 0.40))
-        n_bl_legit = max(1, int(remaining * 0.30))
-        n_fake_obv = max(1, int(remaining * 0.20))
-        n_fake_soph = max(1, remaining - n_hq_legit - n_bl_legit - n_fake_obv)
+        # 5-tier distribution
+        fake_count = max(2, int(total_count * fake_ratio))
+        legit_count = total_count - fake_count
 
-        df_hq_legit = generate_legit_profiles(platform, n_hq_legit)
+        # Fake tiers: 40% obvious, 35% borderline, 25% sophisticated
+        n_fake_obv = max(1, int(fake_count * 0.40))
+        n_fake_border = max(1, int(fake_count * 0.35))
+        n_fake_soph = max(1, fake_count - n_fake_obv - n_fake_border)
 
-        # Borderline legit
+        # Legit tiers (non-celebrity)
+        n_legit_non_celeb = max(1, legit_count - n_celebrity)
+        n_established = max(1, int(n_legit_non_celeb * 0.25))
+        n_casual = max(1, int(n_legit_non_celeb * 0.40))
+        n_bl_legit = max(1, n_legit_non_celeb - n_established - n_casual)
+
+        # Generate fakes
+        df_fake_obv = generate_fake_profiles(platform, n_fake_obv)
+        df_fake_soph = generate_fake_profiles(platform, n_fake_soph)
+
+        # Borderline fakes (aged/semi-legit looking fakes)
+        bf_gen = _BORDERLINE_FAKE_GENERATORS.get(platform)
+        if bf_gen:
+            bf_rows = bf_gen(n_fake_border)
+            df_fake_border = pd.DataFrame(bf_rows)
+            df_fake_border[LABEL_COLUMN] = FAKE_VALUE
+            bf_temporal = _borderline_fake_temporal_cols(len(df_fake_border))
+            for col, vals in bf_temporal.items():
+                df_fake_border[col] = vals
+        else:
+            df_fake_border = generate_fake_profiles(platform, n_fake_border)
+
+        # Generate established legit (high quality)
+        df_established = generate_legit_profiles(platform, n_established)
+        # Casual legit (normal active users)
+        df_casual = generate_legit_profiles(platform, n_casual)
+
+        # Borderline legit (low activity, suspicious-looking but real)
         bl_gen = _BORDERLINE_LEGIT_GENERATORS.get(platform)
         if bl_gen:
             bl_rows = bl_gen(n_bl_legit)
             df_bl_legit = pd.DataFrame(bl_rows)
             df_bl_legit[LABEL_COLUMN] = LEGIT_VALUE
-            temporal_cols = _legit_temporal_cols(len(df_bl_legit))
-            for col, vals in temporal_cols.items():
+            bl_temporal = _legit_temporal_cols(len(df_bl_legit))
+            for col, vals in bl_temporal.items():
                 df_bl_legit[col] = vals
         else:
             df_bl_legit = generate_legit_profiles(platform, n_bl_legit)
 
-        df_fake_obv = generate_fake_profiles(platform, n_fake_obv)
-        df_fake_soph = generate_fake_profiles(platform, n_fake_soph)
-
-        parts = [df_hq_legit, df_bl_legit, df_fake_obv, df_fake_soph]
+        parts = [df_fake_obv, df_fake_border, df_fake_soph, df_established, df_casual, df_bl_legit]
         if df_celebrity is not None:
             parts.append(df_celebrity)
         df = pd.concat(parts, ignore_index=True)
 
         logger.info(
-            "Realistic mode: platform=%s hq_legit=%d borderline=%d "
-            "fake_obv=%d fake_soph=%d celebrity=%d",
-            platform, n_hq_legit, n_bl_legit, n_fake_obv, n_fake_soph,
+            "5-tier realistic mode: platform=%s "
+            "fake_obv=%d fake_border=%d fake_soph=%d "
+            "established=%d casual=%d bl_legit=%d celebrity=%d",
+            platform, n_fake_obv, n_fake_border, n_fake_soph,
+            n_established, n_casual, n_bl_legit,
             len(df_celebrity) if df_celebrity is not None else 0,
         )
     else:
         # Legacy mode: simple fake/legit split + celebrity supplement
         fake_count = max(1, int(total_count * fake_ratio))
-        legit_count = max(1, total_count - fake_count
-                          - (n_celebrity if celebrity_gen else 0))
+        legit_count = max(1, total_count - fake_count - n_celebrity)
         df_fake = generate_fake_profiles(platform, fake_count)
         df_legit = generate_legit_profiles(platform, legit_count)
         parts = [df_fake, df_legit]
