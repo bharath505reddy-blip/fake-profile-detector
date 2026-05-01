@@ -218,6 +218,17 @@ class PredictionLog(db.Model):
 with app.app_context():
     db.create_all()
 
+# Restore API keys saved to instance/api_keys.json across restarts
+try:
+    from live_enrichment import PLATFORM_ENV_VARS as _PENV
+    from utils.api_keys_store import apply_keys_to_environment, migrate_env_keys_to_file
+    migrate_env_keys_to_file(_PENV)
+    _restored = apply_keys_to_environment(_PENV)
+    if _restored:
+        app.logger.info("Restored %d API key(s) from persistent storage", _restored)
+except Exception as _exc:
+    app.logger.warning("Could not restore API keys from storage: %s", _exc)
+
 # Wire photo_analysis DB session factory (avoids circular import)
 try:
     from features.photo_analysis import set_db_session_factory
@@ -1933,24 +1944,31 @@ def cross_platform_api(username: str):
 @app.route("/admin/api-keys", methods=["GET", "POST"])
 @login_required
 def api_keys_config():
-    """Admin page for configuring platform API keys (stored as env vars in session)."""
+    """Admin page for configuring platform API keys (persisted to instance/api_keys.json)."""
     if not current_user.is_admin:
         flash("Admin access required.", "danger")
         return redirect(url_for("index"))
 
     from live_enrichment import PLATFORM_ENV_VARS, get_platform_api_status
+    from utils.api_keys_store import save_api_key, delete_api_key
 
     if request.method == "POST":
+        updated = []
         for platform, env_var in PLATFORM_ENV_VARS.items():
             if not env_var:
                 continue
             val = request.form.get(f"key_{platform}", "").strip()
             if val:
+                # Persist the key and update the live environment
+                save_api_key(platform, val)
                 os.environ[env_var] = val
-                flash(f"{platform.capitalize()} API key updated.", "success")
+                updated.append(platform.capitalize())
             elif request.form.get(f"clear_{platform}"):
+                delete_api_key(platform)
                 os.environ.pop(env_var, None)
                 flash(f"{platform.capitalize()} API key cleared.", "warning")
+        if updated:
+            flash(f"API key(s) updated: {', '.join(updated)}", "success")
         return redirect(url_for("api_keys_config"))
 
     api_status = get_platform_api_status()

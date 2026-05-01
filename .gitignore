@@ -23,6 +23,9 @@ env/
 instance/users.db
 instance/*.db
 
+# Persistent API key storage (contains secrets)
+instance/api_keys.json
+
 # Uploads (user-submitted CSVs)
 uploads/
 
