@@ -52,3 +52,31 @@ htmlcov/
 
 # Jupyter
 .ipynb_checkpoints/
+# Models and training artifacts
+models/*.pkl
+models/*.json
+models/static/
+models/drift_log.json
+
+# Charts
+static/charts/
+models/static/charts/
+
+# Cache and system files
+**/__pycache__/
+*.pyc
+*.pyo
+static/.DS_Store
+.DS_Store
+
+# Logs
+logs/
+
+# Sensitive files
+instance/users.db
+instance/api_keys.json
+config/
+
+# Feature and calibrator files
+models/*.features.json
+models/*_calibrator.json
